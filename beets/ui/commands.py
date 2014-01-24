@@ -1122,7 +1122,7 @@ def modify_items(lib, mods, query, write, move, album, confirm):
     fsets = {}
     for mod in mods:
         key, value = mod.split('=', 1)
-        fsets[key] = _convert_type(key, value, album)
+        fsets[key] = value
 
     # Get the items to modify.
     items, albums = _do_query(lib, query, album, False)
@@ -1130,13 +1130,18 @@ def modify_items(lib, mods, query, write, move, album, confirm):
 
     # Preview change.
     print_('Modifying %i %ss.' % (len(objs), 'album' if album else 'item'))
+    new_values = dict()
     for obj in objs:
         # Identify the changed object.
         ui.print_obj(obj, lib)
+        new_values[obj] = dict()
 
         # Show each change.
         for field, value in fsets.iteritems():
-            _showdiff(field, obj.get(field), value)
+            new_value = obj.evaluate_template(value)
+            new_value = _convert_type(field, new_value, album)
+            new_values[obj][field] = new_value
+            _showdiff(field, obj.get(field), new_value)
 
     # Confirm.
     if confirm:
@@ -1148,7 +1153,7 @@ def modify_items(lib, mods, query, write, move, album, confirm):
     with lib.transaction():
         for obj in objs:
             for field, value in fsets.iteritems():
-                obj[field] = value
+                obj[field] = new_values[obj][field]
 
             if move:
                 cur_path = obj.path
