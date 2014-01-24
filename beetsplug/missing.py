@@ -14,7 +14,7 @@
 
 """List missing tracks.
 """
-import logging
+import logging, sys
 
 from beets.autotag import hooks
 from beets.library import Item, Album
@@ -35,19 +35,24 @@ def _missing(album):
     """Query MusicBrainz to determine items missing from `album`.
     """
     item_mbids = map(lambda x: x.mb_trackid, album.items())
+    item_titles = map(lambda x: x.title, album.items())
 
     if len([i for i in album.items()]) < album.tracktotal:
         # fetch missing items
         # TODO: Implement caching that without breaking other stuff
-        album_info = hooks.album_for_mbid(album.mb_albumid)
-        for track_info in getattr(album_info, 'tracks', []):
-            if track_info.track_id not in item_mbids:
+        album_info = hooks.albums_for_id(album.mb_albumid)
+        if album_info:
+            album_info = album_info[0]
+            for track_info in getattr(album_info, 'tracks', []):
                 item = _item(track_info, album_info, album.id)
-                log.debug('{0}: track {1} in album {2}'
-                          .format(PLUGIN,
-                                  track_info.track_id,
-                                  album_info.album_id))
-                yield item
+                if (track_info.track_id not in item_mbids) or (track_info.title not in item_titles):
+                    log.debug('{0}: track {1} in album {2}'
+                              .format(PLUGIN,
+                                      track_info.track_id,
+                                      album_info.album_id))
+                    yield (False, item)
+                else:
+                    yield (True, item)
 
 
 def _item(track_info, album_info, album_id):
@@ -144,6 +149,7 @@ class MissingPlugin(BeetsPlugin):
             # Default format string for count mode.
             if count and not fmt:
                 fmt = '$albumartist - $album: $missing'
+                print fmt
 
             for album in albums:
                 if count:
@@ -152,8 +158,10 @@ class MissingPlugin(BeetsPlugin):
                         print_obj(album, lib, fmt=fmt)
 
                 else:
-                    for item in _missing(album):
-                        print_obj(item, lib, fmt=fmt)
+                    for (is_found, item) in _missing(album):
+                        if is_found: sys.stdout.write('+ ')
+                        else: sys.stdout.write('- ')
+                        print_obj(item, lib)
 
         self._command.func = _miss
         return [self._command]
