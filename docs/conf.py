@@ -1,10 +1,9 @@
 AUTHOR = u'Adrian Sampson'
 
-# -- General configuration -----------------------------------------------------
+# General configuration
 
-extensions = ['sphinx.ext.autodoc']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.extlinks']
 
-#templates_path = ['_templates']
 exclude_patterns = ['_build']
 source_suffix = '.rst'
 master_doc = 'index'
@@ -13,25 +12,27 @@ project = u'beets'
 copyright = u'2012, Adrian Sampson'
 
 version = '1.3'
-release = '1.3.3'
+release = '1.3.11'
 
 pygments_style = 'sphinx'
 
-# -- Options for HTML output ---------------------------------------------------
+# External links to the bug tracker.
+extlinks = {
+    'bug': ('https://github.com/sampsyo/beets/issues/%s', '#'),
+    'user': ('https://github.com/%s', ''),
+}
 
+# Options for HTML output
 html_theme = 'default'
-#html_static_path = ['_static']
 htmlhelp_basename = 'beetsdoc'
 
-# -- Options for LaTeX output --------------------------------------------------
-
+# Options for LaTeX output
 latex_documents = [
-  ('index', 'beets.tex', u'beets Documentation',
-   AUTHOR, 'manual'),
+    ('index', 'beets.tex', u'beets Documentation',
+     AUTHOR, 'manual'),
 ]
 
-# -- Options for manual page output --------------------------------------------
-
+# Options for manual page output
 man_pages = [
     ('reference/cli', 'beet', u'music tagger and library organizer',
      [AUTHOR], 1),

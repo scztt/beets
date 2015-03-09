@@ -43,13 +43,18 @@ all of these limitations.
   assumes that each album is in a single directory. These directories can be
   arbitrarily deep (like ``music/2010/hiphop/seattle/freshespresso/glamour``),
   but any directory with music files in it is interpreted as a separate album.
-  This means that your flat directory of six thousand uncategorized MP3s won't
-  currently be autotaggable. (This will change eventually.)
 
-  There is one exception to this rule: directories that look like separate parts
-  of a *multi-disc album* are tagged together as a single release. If two
-  adjacent albums have a common prefix, followed by "disc," "disk," or "CD"
-  and then a number, they are tagged together.
+  There are, however, a couple of exceptions to this rule:
+
+  First, directories that look like separate parts of a *multi-disc album* are
+  tagged together as a single release. If two adjacent albums have a common
+  prefix, followed by "disc," "disk," or "CD" and then a number, they are
+  tagged together.
+
+  Second, if you have jumbled directories containing more than one album, you
+  can ask beets to split them apart for you based on their metadata. Use
+  either the ``--group-albums`` command-line flag or the *G* interactive
+  option described below.
 
 * The music may have bad tags, but it's not completely untagged. This is
   because beets by default infers tags based on existing metadata. But this is
@@ -68,8 +73,8 @@ all of these limitations.
       that.
 
 * Currently, MP3, AAC, FLAC, ALAC, Ogg Vorbis, Monkey's Audio, WavPack,
-  Musepack, Windows Media, and Opus files are supported. (Do you use some
-  other format? Please `file a feature request`_!)
+  Musepack, Windows Media, Opus, and AIFF files are supported. (Do you use
+  some other format? Please `file a feature request`_!)
 
 .. _file a feature request: https://github.com/sampsyo/beets/issues/new
 
@@ -114,6 +119,11 @@ command-line options you should know:
   can use ``beet import -AC`` to quickly add a bunch of files to your library
   without doing anything to them.
 
+* ``beet import -g``: assume there are multiple albums contained in each
+  directory. The tracks contained a directory are grouped by album artist and
+  album name and you will be asked to import each of these groups separately.
+  See the "Group albums" choice below.
+
 Similarity
 ----------
 
@@ -152,7 +162,9 @@ When beets needs your input about a match, it says something like this::
     * Scenic World (Second Version) -> Scenic World
     [A]pply, More candidates, Skip, Use as-is, as Tracks, Enter search, or aBort?
 
-When beets asks you this question, it wants you to enter one of the capital letters: A, M, S, U, T, E, or B. That is, you can choose one of the following:
+When beets asks you this question, it wants you to enter one of the capital
+letters: A, M, S, U, T, G, E, or B. That is, you can choose one of the
+following:
 
 * *A*: Apply the suggested changes shown and move on.
 
@@ -168,6 +180,11 @@ When beets asks you this question, it wants you to enter one of the capital lett
   if the tracks don't form a real release---you just have one or more loner
   tracks that aren't a full album. This will temporarily flip the tagger into
   *singleton* mode, which attempts to match each track individually.
+
+* *G*: Group tracks in this directory by *album artist* and *album* and import
+  groups as albums. If the album artist for a track is not set then the artist
+  is used to group that track. For each group importing proceeds as for
+  directories. This is helpful if a directory contains multiple albums.
 
 * *E*: Enter an artist and album to use as a search in the database. Use this
   option if beets hasn't found any good options because the album is mistagged

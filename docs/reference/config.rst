@@ -2,16 +2,20 @@ Configuration
 =============
 
 Beets has an extensive configuration system that lets you customize nearly
-every aspect of its operation. To configure beets, you'll edit a file called
-``config.yaml``. The location of this file depends on your OS:
+every aspect of its operation. To configure beets, you create a file called
+``config.yaml``. The location of the file depend on your platform (type ``beet
+config -p`` to see the path on your system):
 
-* On Unix-like OSes (including OS X), you want ``~/.config/beets/config.yaml``.
+* On Unix-like OSes, write ``~/.config/beets/config.yaml``.
 * On Windows, use ``%APPDATA%\beets\config.yaml``. This is usually in a
   directory like ``C:\Users\You\AppData\Roaming``.
-* On OS X, you can also use ``~/Library/Application Support/beets/config.yaml``
-  if you prefer that over the Unix-like ``~/.config``.
-* If you prefer a different location, set the ``BEETSDIR`` environment variable
-  to a path; beets will then look for a ``config.yaml`` in that directory.
+* On OS X, you can use either the Unix location or ``~/Library/Application
+  Support/beets/config.yaml``.
+
+You can launch your text editor to create or update your configuration by
+typing ``beet config -e``. (See the :ref:`config-cmd` command for details.) It
+is also possible to customize the location of the configuration file and even
+use multiple layers of configuration. See `Configuration Location`_, below.
 
 The config file uses `YAML`_ syntax. You can use the full power of YAML, but
 most configuration options are simple key/value pairs. This means your config
@@ -28,6 +32,14 @@ have questions about more sophisticated syntax, take a look at the `YAML`_
 documentation.
 
 .. _YAML: http://yaml.org/
+
+The rest of this page enumerates the dizzying litany of configuration options
+available in beets. You might also want to see an
+:ref:`example <config-example>`.
+
+.. contents::
+    :local:
+    :depth: 2
 
 Global Options
 --------------
@@ -49,8 +61,8 @@ library. Defaults to a folder called ``Music`` in your home directory.
 plugins
 ~~~~~~~
 
-A space-separated list of plugin module names to load. For instance, beets
-includes the BPD plugin for playing music.
+A space-separated list of plugin module names to load. See
+:ref:`using-plugins`.
 
 pluginpath
 ~~~~~~~~~~
@@ -98,6 +110,7 @@ unexpected behavior on all popular platforms::
         '[<>:"\?\*\|]': _
         '\.$': _
         '\s+$': ''
+        '^\s+': ''
 
 These substitutions remove forward and back slashes, leading dots, and
 control characters—all of which is a good idea on any OS. The fourth line
@@ -105,6 +118,31 @@ removes the Windows "reserved characters" (useful even on Unix for for
 compatibility with Windows-influenced network filesystems like Samba).
 Trailing dots and trailing whitespace, which can cause problems on Windows
 clients, are also removed.
+
+Note that paths might contain special characters such as typographical
+quotes (``“”``). With the configuration above, those will not be
+replaced as they don't match the typewriter quote (``"``). To also strip these
+special characters, you can either add them to the replacement list or use the
+:ref:`asciify-paths` configuration option below.
+
+.. _asciify-paths:
+
+asciify_paths
+~~~~~~~~~~~~~
+
+Convert all non-ASCII characters in paths to ASCII equivalents.
+
+For example, if your path template for
+singletons is ``singletons/$title`` and the title of a track is "Café",
+then the track will be saved as ``singletons/Cafe.mp3``.  The changes
+take place before applying the :ref:`replace` configuration and are roughly
+equivalent to wrapping all your path templates in the ``%asciify{}``
+:ref:`template function <template-functions>`.
+
+Default: ``no``.
+
+.. _unidecode module: http://pypi.python.org/pypi/Unidecode
+
 
 .. _art-filename:
 
@@ -124,31 +162,47 @@ Either ``yes`` or ``no``, indicating whether the autotagger should use
 multiple threads. This makes things faster but may behave strangely.
 Defaults to ``yes``.
 
-color
-~~~~~
-
-Either ``yes`` or ``no``; whether to use color in console output (currently
-only in the ``import`` command). Turn this off if your terminal doesn't
-support ANSI colors.
 
 .. _list_format_item:
+.. _format_item:
 
-list_format_item
-~~~~~~~~~~~~~~~~
+format_item
+~~~~~~~~~~~
 
 Format to use when listing *individual items* with the :ref:`list-cmd`
 command and other commands that need to print out items. Defaults to
 ``$artist - $album - $title``. The ``-f`` command-line option overrides
 this setting.
 
-.. _list_format_album:
+It used to be named `list_format_item`.
 
-list_format_album
-~~~~~~~~~~~~~~~~~
+.. _list_format_album:
+.. _format_album:
+
+format_album
+~~~~~~~~~~~~
 
 Format to use when listing *albums* with :ref:`list-cmd` and other
 commands. Defaults to ``$albumartist - $album``. The ``-f`` command-line
 option overrides this setting.
+
+It used to be named `list_format_album`.
+
+.. _sort_item:
+
+sort_item
+~~~~~~~~~
+
+Default sort order to use when fetching items from the database. Defaults to
+``artist+ album+ disc+ track+``. Explicit sort orders override this default.
+
+.. _sort_album:
+
+sort_album
+~~~~~~~~~~
+
+Default sort order to use when fetching items from the database. Defaults to
+``albumartist+ album+``. Explicit sort orders override this default.
 
 .. _original_date:
 
@@ -201,6 +255,9 @@ directory if it's empty. A directory is considered empty if it only contains
 files whose names match the glob patterns in `clutter`, which should be a list
 of strings. The default list consists of "Thumbs.DB" and ".DS_Store".
 
+The importer only removes recursively searched subdirectories---the top-level
+directory you specify on the command line is never deleted.
+
 .. _max_filename_length:
 
 max_filename_length
@@ -218,6 +275,49 @@ id3v23
 By default, beets writes MP3 tags using the ID3v2.4 standard, the latest
 version of ID3. Enable this option to instead use the older ID3v2.3 standard,
 which is preferred by certain older software such as Windows Media Player.
+
+
+UI Options
+----------
+
+The options that allow for customization of the visual appearance
+of the console interface.
+
+These options are available in this section:
+
+color
+~~~~~
+
+Either ``yes`` or ``no``; whether to use color in console output (currently
+only in the ``import`` command). Turn this off if your terminal doesn't
+support ANSI colors.
+
+.. note::
+
+    The `color` option was previously a top-level configuration. This is
+    still respected, but a deprecation message will be shown until your
+    top-level `color` configuration has been nested under `ui`.
+
+colors
+~~~~~~
+
+The colors that are used throughout the user interface. These are only used if
+the ``color`` option is set to ``yes``. For example, you might have a section
+in your configuration file that looks like this::
+
+    ui:
+        color: yes
+        colors:
+            text_success: green
+            text_warning: yellow
+            text_error: red
+            text_highlight: red
+            text_highlight_minor: lightgray
+            action_default: turquoise
+            action: blue
+
+Available colors: black, darkred, darkgreen, brown, darkblue, purple, teal,
+lightgray, darkgray, red, green, yellow, blue, fuchsia, turquoise, white
 
 
 Importer Options
@@ -268,6 +368,21 @@ This option *overrides* ``copy``, so enabling it will always move
 (and not copy) files. The ``-c`` switch to the ``beet import`` command,
 however, still takes precedence.
 
+.. _link:
+
+link
+~~~~
+
+Either ``yes`` or ``no``, indicating whether to use symbolic links instead of
+moving or copying files. (It conflicts with the ``move`` and ``copy``
+options.) Defaults to ``no``.
+
+This option only works on platforms that support symbolic links: i.e., Unixes.
+It will fail on Windows.
+
+It's likely that you'll also want to set ``write`` to ``no`` if you use this
+option to preserve the metadata on the linked files.
+
 resume
 ~~~~~~
 
@@ -277,6 +392,8 @@ possible; "no" means resuming is disabled entirely; "ask" (the default)
 means that the user should be prompted when resuming is possible. The ``-p``
 and ``-P`` flags correspond to the "yes" and "no" settings and override this
 option.
+
+.. _incremental:
 
 incremental
 ~~~~~~~~~~~
@@ -349,6 +466,40 @@ finds. When enabled, this mode prints out the title of every track, regardless
 of whether it matches the original metadata. (The default behavior only shows
 changes.) Default: ``no``.
 
+.. _group_albums:
+
+group_albums
+~~~~~~~~~~~~
+
+By default, the beets importer groups tracks into albums based on the
+directories they reside in. This option instead uses files' metadata to
+partition albums. Enable this option if you have directories that contain
+tracks from many albums mixed together.
+
+The ``--group-albums`` or ``-g`` option to the :ref:`import-cmd` command is
+equivalent, and the *G* interactive option invokes the same workflow.
+
+.. note::
+    
+    The :ref:`import log <import_log>` currently contains less information
+    in album-grouping mode. (Specifically, no directory names recorded because
+    directories are not used for grouping in this mode.)
+
+Default: ``no``.
+
+.. _autotag:
+
+autotag
+~~~~~~~
+
+By default, the beets importer always attempts to autotag new music. If
+most of your collection consists of obscure music, you may be interested in
+disabling autotagging by setting this option to ``no``. (You can re-enable it
+with the ``-a`` flag to the :ref:`import-cmd` command.)
+
+Default: ``yes``.
+
+
 .. _musicbrainz-config:
 
 MusicBrainz Options
@@ -371,6 +522,16 @@ to one request per second.
 
 .. _limited: http://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
 .. _MusicBrainz: http://musicbrainz.org/
+
+.. _searchlimit:
+
+searchlimit
+~~~~~~~~~~~
+
+The number of matches returned when sending search queries to the
+MusicBrainz server.
+
+Default: ``5``.
 
 .. _match-config:
 
@@ -487,6 +648,19 @@ the penalty name to the ``ignored`` setting::
 
 The available penalties are the same as those for the :ref:`max_rec` setting.
 
+.. _required:
+
+required
+~~~~~~~~
+
+You can avoid matches that lack certain required information. Add the tags you
+want to enforce to the ``required`` setting::
+
+    match:
+        required: year label catalognum country
+
+No tags are required by default.
+
 .. _path-format-config:
 
 Path Format Configuration
@@ -526,6 +700,53 @@ fact, just shorthand for the explicit queries ``singleton:true`` and
 ``comp:true``. In contrast, ``default`` is special and has no query equivalent:
 the ``default`` format is only used if no queries match.
 
+
+Configuration Location
+----------------------
+
+The beets configuration file is usually located in a standard location that
+depends on your OS, but there are a couple of ways you can tell beets where to
+look.
+
+Environment Variable
+~~~~~~~~~~~~~~~~~~~~
+
+First, you can set the ``BEETSDIR`` environment variable to a directory
+containing a ``config.yaml`` file. This replaces your configuration in the
+default location. This also affects where auxiliary files, like the library
+database, are stored by default (that's where relative paths are resolved to).
+This environment variable is useful if you need to manage multiple beets
+libraries with separate configurations.
+
+Command-Line Option
+~~~~~~~~~~~~~~~~~~~
+
+Alternatively, you can use the ``--config`` command-line option to indicate a
+YAML file containing options that will then be merged with your existing
+options (from ``BEETSDIR`` or the default locations). This is useful if you
+want to keep your configuration mostly the same but modify a few options as a
+batch. For example, you might have different strategies for importing files,
+each with a different set of importer options.
+
+Default Location
+~~~~~~~~~~~~~~~~
+
+In the absence of a ``BEETSDIR`` variable, beets searches a few places for
+your configuration, depending on the platform:
+
+- On Unix platforms, including OS X:``~/.config/beets`` and then
+  ``$XDG_CONFIG_DIR/beets``, if the environment variable is set.
+- On OS X, we also search ``~/Library/Application Support/beets`` before the
+  Unixy locations.
+- On Windows: ``~\AppData\Roaming\beets``, and then ``%APPDATA%\beets``, if
+  the environment variable is set.
+
+Beets uses the first directory in your platform's list that contains
+``config.yaml``. If no config file exists, the last path in the list is used.
+
+
+.. _config-example:
+
 Example
 -------
 
@@ -552,14 +773,6 @@ Here's an example file::
         singleton: Singletons/$artist - $title
         comp: $genre/$album/$track $title
         albumtype:soundtrack: Soundtracks/$album/$track $title
-
-    bpd:
-        host: 127.0.0.1
-        port: 6600
-        password: seekrit
-
-(That ``[bpd]`` section configures the optional :doc:`BPD </plugins/bpd>`
-plugin.)
 
 .. only:: man
 

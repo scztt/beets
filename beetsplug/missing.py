@@ -1,5 +1,5 @@
 # This file is part of beets.
-# Copyright 2013, Pedro Silva.
+# Copyright 2015, Pedro Silva.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -15,44 +15,19 @@
 """List missing tracks.
 """
 import logging, sys
+from __future__ import (division, absolute_import, print_function,
+                        unicode_literals)
 
 from beets.autotag import hooks
-from beets.library import Item, Album
+from beets.library import Item
 from beets.plugins import BeetsPlugin
-from beets.ui import decargs, print_obj, Subcommand
-
-PLUGIN = 'missing'
-log = logging.getLogger('beets')
+from beets.ui import decargs, print_, Subcommand
 
 
 def _missing_count(album):
     """Return number of missing items in `album`.
     """
-    return (album.tracktotal or 0) - len(album.items())
-
-
-def _missing(album):
-    """Query MusicBrainz to determine items missing from `album`.
-    """
-    item_mbids = map(lambda x: x.mb_trackid, album.items())
-    item_titles = map(lambda x: x.title, album.items())
-
-    if len([i for i in album.items()]) < album.tracktotal:
-        # fetch missing items
-        # TODO: Implement caching that without breaking other stuff
-        album_info = hooks.albums_for_id(album.mb_albumid)
-        if album_info:
-            album_info = album_info[0]
-            for track_info in getattr(album_info, 'tracks', []):
-                item = _item(track_info, album_info, album.id)
-                if (track_info.track_id not in item_mbids) or (track_info.title not in item_titles):
-                    log.debug('{0}: track {1} in album {2}'
-                              .format(PLUGIN,
-                                      track_info.track_id,
-                                      album_info.album_id))
-                    yield (False, item)
-                else:
-                    yield (True, item)
+    return (album.albumtotal or 0) - len(album.items())
 
 
 def _item(track_info, album_info, album_id):
@@ -66,41 +41,41 @@ def _item(track_info, album_info, album_id):
     t = track_info
     a = album_info
 
-    return Item(
-        album_id =           album_id,
-        album =              a.album,
-        albumartist =        a.artist,
-        albumartist_credit = a.artist_credit,
-        albumartist_sort =   a.artist_sort,
-        albumdisambig =      a.albumdisambig,
-        albumstatus =        a.albumstatus,
-        albumtype =          a.albumtype,
-        artist =             t.artist,
-        artist_credit =      t.artist_credit,
-        artist_sort =        t.artist_sort,
-        asin =               a.asin,
-        catalognum =         a.catalognum,
-        comp =               a.va,
-        country =            a.country,
-        day =                a.day,
-        disc =               t.medium,
-        disctitle =          t.disctitle,
-        disctotal =          a.mediums,
-        label =              a.label,
-        language =           a.language,
-        length =             t.length,
-        mb_albumid =         a.album_id,
-        mb_artistid =        t.artist_id,
-        mb_releasegroupid =  a.releasegroup_id,
-        mb_trackid =         t.track_id,
-        media =              a.media,
-        month =              a.month,
-        script =             a.script,
-        title =              t.title,
-        track =              t.index,
-        tracktotal =         len(a.tracks),
-        year =               a.year,
-    )
+    return Item(**{
+        'album_id':           album_id,
+        'album':              a.album,
+        'albumartist':        a.artist,
+        'albumartist_credit': a.artist_credit,
+        'albumartist_sort':   a.artist_sort,
+        'albumdisambig':      a.albumdisambig,
+        'albumstatus':        a.albumstatus,
+        'albumtype':          a.albumtype,
+        'artist':             t.artist,
+        'artist_credit':      t.artist_credit,
+        'artist_sort':        t.artist_sort,
+        'asin':               a.asin,
+        'catalognum':         a.catalognum,
+        'comp':               a.va,
+        'country':            a.country,
+        'day':                a.day,
+        'disc':               t.medium,
+        'disctitle':          t.disctitle,
+        'disctotal':          a.mediums,
+        'label':              a.label,
+        'language':           a.language,
+        'length':             t.length,
+        'mb_albumid':         a.album_id,
+        'mb_artistid':        t.artist_id,
+        'mb_releasegroupid':  a.releasegroup_id,
+        'mb_trackid':         t.track_id,
+        'media':              t.media,
+        'month':              a.month,
+        'script':             a.script,
+        'title':              t.title,
+        'track':              t.index,
+        'tracktotal':         len(a.tracks),
+        'year':               a.year,
+    })
 
 
 class MissingPlugin(BeetsPlugin):
@@ -120,19 +95,13 @@ class MissingPlugin(BeetsPlugin):
         self._command = Subcommand('missing',
                                    help=__doc__,
                                    aliases=['miss'])
-
-        self._command.parser.add_option('-f', '--format', dest='format',
-                                        action='store', type='string',
-                                        help='print with custom FORMAT',
-                                        metavar='FORMAT')
-
         self._command.parser.add_option('-c', '--count', dest='count',
                                         action='store_true',
                                         help='count missing tracks per album')
-
         self._command.parser.add_option('-t', '--total', dest='total',
                                         action='store_true',
                                         help='count total of missing tracks')
+        self._command.parser.add_format_option()
 
     def commands(self):
         def _miss(lib, opts, args):
@@ -153,9 +122,8 @@ class MissingPlugin(BeetsPlugin):
 
             for album in albums:
                 if count:
-                    missing = _missing_count(album)
-                    if missing:
-                        print_obj(album, lib, fmt=fmt)
+                    if _missing_count(album):
+                        print_(format(album, fmt))
 
                 else:
                     for (is_found, item) in _missing(album):
@@ -165,3 +133,19 @@ class MissingPlugin(BeetsPlugin):
 
         self._command.func = _miss
         return [self._command]
+
+    def _missing(self, album):
+        """Query MusicBrainz to determine items missing from `album`.
+        """
+        item_mbids = map(lambda x: x.mb_trackid, album.items())
+
+        if len([i for i in album.items()]) < album.albumtotal:
+            # fetch missing items
+            # TODO: Implement caching that without breaking other stuff
+            album_info = hooks.album_for_mbid(album.mb_albumid)
+            for track_info in getattr(album_info, 'tracks', []):
+                if track_info.track_id not in item_mbids:
+                    item = _item(track_info, album_info, album.id)
+                    self._log.debug(u'track {1} in album {2}',
+                                    track_info.track_id, album_info.album_id)
+                    yield item

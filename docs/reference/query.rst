@@ -129,6 +129,43 @@ and this command finds MP3 files with bitrates of 128k or lower::
     $ beet list format:MP3 bitrate:..128000
 
 
+.. _datequery:
+
+Date and Date Range Queries
+---------------------------
+
+Date-valued fields, such as *added* and *mtime*, have a special query syntax
+that lets you specify years, months, and days as well as ranges between dates.
+
+Dates are written separated by hyphens, like ``year-month-day``, but the month
+and day are optional. If you leave out the day, for example, you will get
+matches for the whole month.
+
+Date *intervals*, like the numeric intervals described above, are separated by
+two dots (``..``). You can specify a start, an end, or both.
+
+Here is an example that finds all the albums added in 2008::
+
+    $ beet ls -a 'added:2008'
+
+Find all items added in the years 2008, 2009 and 2010::
+
+    $ beet ls 'added:2008..2010'
+
+Find all items added before the year 2010::
+
+    $ beet ls 'added:..2009'
+
+Find all items added on or after 2008-12-01 but before 2009-10-12::
+
+    $ beet ls 'added:2008-12..2009-10-11'
+
+Find all items with a file modification time between 2008-12-01 and
+2008-12-03::
+
+    $ beet ls 'mtime:2008-12-01..2008-12-02'
+
+
 Path Queries
 ------------
 
@@ -146,3 +183,32 @@ equivalent::
 Note that this only matches items that are *already in your library*, so a path
 query won't necessarily find *all* the audio files in a directory---just the
 ones you've already added to your beets library.
+
+Path queries are case-sensitive on most platforms but case-insensitive on
+Windows.
+
+.. _query-sort:
+
+Sort Order
+----------
+
+Queries can specify a sort order. Use the name of the `field` you want to sort
+on, followed by a ``+`` or ``-`` sign to indicate ascending or descending
+sort. For example, this command::
+
+    $ beet list -a year+
+
+will list all albums in chronological order. You can also specify several sort
+orders, which will be used in the same order as they appear in your query::
+
+    $ beet list -a genre+ year+
+
+This command will sort all albums by genre and, in each genre, in chronological
+order.
+
+The ``artist`` and ``albumartist`` keys are special: they attempt to use their
+corresponding ``artist_sort`` and ``albumartist_sort`` fields for sorting
+transparently (but fall back to the ordinary fields when those are empty).
+
+You can set the default sorting behavior with the :ref:`sort_item` and
+:ref:`sort_album` configuration options.

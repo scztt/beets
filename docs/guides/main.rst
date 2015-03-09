@@ -12,7 +12,7 @@ Installing
 You will need Python. (Beets is written for `Python 2.7`_, but it works with
 2.6 as well. Python 3.x is not yet supported.)
 
-.. _Python 2.7: http://www.python.org/download/releases/2.7.2/
+.. _Python 2.7: http://www.python.org/download/
 
 * **Mac OS X** v10.7 (Lion) and 10.8 (Mountain Lion) include Python 2.7 out of
   the box; Snow Leopard ships with Python 2.6.
@@ -21,8 +21,9 @@ You will need Python. (Beets is written for `Python 2.7`_, but it works with
   official package (`Debian details`_, `Ubuntu details`_), so try typing:
   ``apt-get install beets``. But the version in the repositories might lag
   behind, so make sure you read the right version of these docs. If you want
-  the latest version, you can get everything you need by running:
-  ``apt-get install python-dev python-setuptools python-pip``
+  the latest version, you can get everything you need to install with pip
+  as described below by running:
+  ``apt-get install python-dev python-pip``
 
 * On **Arch Linux**, `beets is in [community]`_, so just run ``pacman -S
   beets``. (There's also a bleeding-edge `dev package`_ in the AUR, which will
@@ -34,6 +35,22 @@ You will need Python. (Beets is written for `Python 2.7`_, but it works with
 
 * On **FreeBSD**, there's a `beets port`_ at ``audio/beets``.
 
+* On **OpenBSD-current**, beets is available in ports (at ``audio/beets``) and
+  as a package, which can be installed with ``pkg_add beets``.
+
+* For **Slackware**, there's a `SlackBuild`_ available.
+
+* On **Fedora 21**, you there is a `copr`_ for beets, which you can install
+  using `DNF`_ like so::
+
+      $ yum install dnf dnf-plugins-core
+      $ dnf copr enable afreof/beets
+      $ yum update
+      $ yum install beets
+
+.. _copr: https://copr.fedoraproject.org/coprs/afreof/beets/
+.. _dnf: http://fedoraproject.org/wiki/Features/DNF
+.. _SlackBuild: http://slackbuilds.org/repository/14.1/multimedia/beets/
 .. _beets port: http://portsmon.freebsd.org/portoverview.py?category=audio&portname=beets
 .. _beets from AUR: http://aur.archlinux.org/packages.php?ID=39577
 .. _dev package: http://aur.archlinux.org/packages.php?ID=48617
@@ -64,22 +81,19 @@ get it right:
 
 1. If you don't have it, `install Python`_ (you want Python 2.7).
 
-2. Install `Setuptools`_ from PyPI. To do this, scroll to the bottom of that
-   page and download the Windows installer (``.exe``, not ``.egg``) for your
-   Python version (for example: ``setuptools-0.6c11.win32-py2.7.exe``).
-
-3. If you haven't done so already, set your ``PATH`` environment variable to
+2. If you haven't done so already, set your ``PATH`` environment variable to
    include Python and its scripts. To do so, you have to get the "Properties"
    window for "My Computer", then choose the "Advanced" tab, then hit the
    "Environment Variables" button, and then look for the ``PATH`` variable in
    the table. Add the following to the end of the variable's value:
    ``;C:\Python27;C:\Python27\Scripts``.
 
-4. Open a command prompt and install pip by running: ``easy_install pip``
+3. Next, `install pip`_ (if you don't have it already) by downloading and
+   running the `get-pip.py`_ script.
 
-5. Now install beets by running: ``pip install beets``
+4. Now install beets by running: ``pip install beets``
 
-6. You're all set! Type ``beet`` at the command prompt to make sure everything's
+5. You're all set! Type ``beet`` at the command prompt to make sure everything's
    in order.
 
 Windows users may also want to install a context menu item for importing files
@@ -93,19 +107,20 @@ trouble or you have more detail to contribute here, please direct it to
 `the mailing list`_.
 
 .. _install Python: http://python.org/download/
-.. _Setuptools: http://pypi.python.org/pypi/setuptools
 .. _beets.reg: https://github.com/sampsyo/beets/blob/master/extra/beets.reg
+.. _install pip: http://www.pip-installer.org/en/latest/installing.html#install-pip
+.. _get-pip.py: https://raw.github.com/pypa/pip/master/contrib/get-pip.py
 
 
 Configuring
 -----------
 
 You'll want to set a few basic options before you start using beets. The
-configuration is stored in a text file: on Unix-like OSes, the config file is
-at ``~/.config/beets/config.yaml``; on Windows, it's at
-``%APPDATA%\beets\config.yaml``. Create and edit the appropriate file with your
-favorite text editor. (You may need to create the enclosing directories also.)
-The file will start out empty, but here's good place to start::
+:doc:`configuration </reference/config>` is stored in a text file. You
+can show its location by running ``beet config -p``, though it may not
+exist yet. Run ``beet config -e`` to edit the configuration in your
+favorite text editor. The file will start out empty, but here's good
+place to start::
 
     directory: ~/music
     library: ~/data/musiclibrary.blb

@@ -1,3 +1,12 @@
+.. image:: https://travis-ci.org/sampsyo/beets.svg?branch=master
+    :target: https://travis-ci.org/sampsyo/beets
+
+.. image:: http://img.shields.io/coveralls/sampsyo/beets.svg
+    :target: https://coveralls.io/r/sampsyo/beets
+
+.. image:: http://img.shields.io/pypi/v/beets.svg
+    :target: https://pypi.python.org/pypi/beets
+
 Beets is the media library management system for obsessive-compulsive music
 geeks.
 
@@ -22,7 +31,7 @@ imagine for your music collection. Via `plugins`_, beets becomes a panacea:
 - Fetch or calculate all the metadata you could possibly need: `album art`_,
   `lyrics`_, `genres`_, `tempos`_, `ReplayGain`_ levels, or `acoustic
   fingerprints`_.
-- Get metadata from `MusicBrainz`_, `Discogs`_, or `Beatport`_. Or guess
+- Get metadata from `MusicBrainz`_ or `Discogs`_. Or guess
   metadata using songs' filenames or their acoustic fingerprints.
 - `Transcode audio`_ to any format you like.
 - Check your library for `duplicate tracks and albums`_ or for `albums that
@@ -39,7 +48,7 @@ If beets doesn't do what you want yet, `writing your own plugin`_ is
 shockingly simple if you know a little Python.
 
 .. _plugins: http://beets.readthedocs.org/page/plugins/
-.. _MPD: http://mpd.wikia.com/
+.. _MPD: http://www.musicpd.org/
 .. _MusicBrainz music collection: http://musicbrainz.org/doc/Collections/
 .. _writing your own plugin:
     http://beets.readthedocs.org/page/dev/plugins.html
@@ -51,12 +60,11 @@ shockingly simple if you know a little Python.
     http://beets.readthedocs.org/page/plugins/duplicates.html
 .. _Transcode audio:
     http://beets.readthedocs.org/page/plugins/convert.html
-.. _Beatport: http://www.beatport.com/
 .. _Discogs: http://www.discogs.com/
 .. _acoustic fingerprints:
     http://beets.readthedocs.org/page/plugins/chroma.html
 .. _ReplayGain: http://beets.readthedocs.org/page/plugins/replaygain.html
-.. _tempos: http://beets.readthedocs.org/page/plugins/echonest_tempo.html
+.. _tempos: http://beets.readthedocs.org/page/plugins/echonest.html
 .. _genres: http://beets.readthedocs.org/page/plugins/lastgenre.html
 .. _album art: http://beets.readthedocs.org/page/plugins/fetchart.html
 .. _lyrics: http://beets.readthedocs.org/page/plugins/lyrics.html
@@ -81,5 +89,5 @@ Authors
 Beets is by `Adrian Sampson`_ with a supporting cast of thousands. For help,
 please contact the `mailing list`_.
 
-.. _mailing list: http://beets.radbox.org/
+.. _mailing list: https://groups.google.com/forum/#!forum/beets-users
 .. _Adrian Sampson: http://homes.cs.washington.edu/~asampson/

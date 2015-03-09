@@ -139,18 +139,17 @@ it's helpful to run on the "bleeding edge". To run the latest source:
 
    -  Use ``pip`` to install the latest snapshot tarball: just type
       ``pip install https://github.com/sampsyo/beets/tarball/master``.
-   -  Grab the source using Mercurial
-      (``hg clone https://bitbucket.org/adrian/beets``) or git
-      (``git clone https://github.com/sampsyo/beets.git``). Then
+   -  Grab the source using Git:
+      ``git clone https://github.com/sampsyo/beets.git``. Then
       ``cd beets`` and type ``python setup.py install``.
    -  Use ``pip`` to install an "editable" version of beets based on an
       automatic source checkout. For example, run
-      ``pip install -e hg+https://bitbucket.org/adrian/beets#egg=beets``
-      to clone beets from BitBucket using Mercurial and install it,
-      allowing you to modify the source in-place to try out changes.
+      ``pip install -e git+https://github.com/sampsyo/beets#egg=beets``
+      to clone beets and install it, allowing you to modify the source
+      in-place to try out changes.
 
-More details about the beets source are available on the [[Hacking]]
-page.
+More details about the beets source are available on the :doc:`developer documentation </dev/index>`
+pages.
 
 
 .. _bugs:
@@ -189,6 +188,24 @@ there to report a bug. Please follow these guidelines when reporting an issue:
 If you've never reported a bug before, Mozilla has some well-written
 `general guidelines for good bug
 reports <http://www.mozilla.org/bugs/>`__.
+
+
+.. _find-config:
+
+…find the configuration file (config.yaml)?
+-------------------------------------------
+
+You create this file yourself; beets just reads it. See
+:doc:`/reference/config`.
+
+
+.. _special-chars:
+
+…avoid using special characters in my filenames?
+------------------------------------------------
+
+Use the ``%asciify{}`` function in your path formats. See
+:ref:`template-functions`.
 
 
 Why does beets…
@@ -233,11 +250,11 @@ to see which version added the plugin. (You can type ``beet version`` to
 check which version of beets you have installed.)
 
 If you want to live on the bleeding edge and use the latest source
-version of beets, you can check out the source (see the next question).
+version of beets, you can check out the source (see :ref:`the relevant
+question <src>`).
 
 To see the beets documentation for your version (and avoid confusion
-with new features in trunk), select your version from the
-left-hand sidebar (or the buttons at the bottom of the window).
+with new features in trunk), select your version from the menu in the sidebar.
 
 
 .. _kill:
@@ -331,3 +348,16 @@ safely.
 Most notably, Windows forbids trailing dots, so a folder called "M.I.A."
 will be rewritten to "M.I.A\_" by default. Change the ``replace`` config
 if you don't want this behavior and don't need Windows-safe names.
+
+
+.. _pathq:
+
+…say "command not found"?
+-------------------------
+
+You need to put the ``beet`` program on your system's search path. If you
+installed using pip, the command ``pip show -f beets`` can show you where
+``beet`` was placed on your system. If you need help extending your ``$PATH``,
+try `this Super User answer`_.
+
+.. _this Super User answer: http://superuser.com/a/284361/4569

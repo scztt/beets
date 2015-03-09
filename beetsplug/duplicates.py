@@ -1,5 +1,5 @@
 # This file is part of beets.
-# Copyright 2013, Pedro Silva.
+# Copyright 2015, Pedro Silva.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -14,26 +14,27 @@
 
 """List duplicate tracks or albums.
 """
+from __future__ import (division, absolute_import, print_function,
+                        unicode_literals)
+
 import shlex
-import logging
 
 from beets.plugins import BeetsPlugin
-from beets.ui import decargs, print_obj, vararg_callback, Subcommand, UserError
-from beets.util import command_output, displayable_path
+from beets.ui import decargs, print_, vararg_callback, Subcommand, UserError
+from beets.util import command_output, displayable_path, subprocess
 
 PLUGIN = 'duplicates'
-log = logging.getLogger('beets')
 
 
 def _process_item(item, lib, copy=False, move=False, delete=False,
-                  tag=False, format=None):
+                  tag=False, fmt=''):
     """Process Item `item` in `lib`.
     """
     if copy:
-        item.move_file(dest=copy, copy=True)
+        item.move(basedir=copy, copy=True)
         item.store()
     if move:
-        item.move_file(dest=move, copy=False)
+        item.move(basedir=move, copy=False)
         item.store()
     if delete:
         item.remove(delete=True)
@@ -44,55 +45,61 @@ def _process_item(item, lib, copy=False, move=False, delete=False,
             raise UserError('%s: can\'t parse k=v tag: %s' % (PLUGIN, tag))
         setattr(k, v)
         item.store()
-    print_obj(item, lib, fmt=format)
+    print_(format(item, fmt))
 
 
-def _checksum(item, prog):
+def _checksum(item, prog, log):
     """Run external `prog` on file path associated with `item`, cache
     output as flexattr on a key that is the name of the program, and
     return the key, checksum tuple.
     """
-    args = shlex.split(prog.format(file=item.path))
+    args = [p.format(file=item.path) for p in shlex.split(prog)]
     key = args[0]
     checksum = getattr(item, key, False)
     if not checksum:
-        log.debug('%s: key %s on item %s not cached: computing checksum',
+        log.debug(u'{0}: key {1} on item {2} not cached: computing checksum',
                   PLUGIN, key, displayable_path(item.path))
         try:
             checksum = command_output(args)
             setattr(item, key, checksum)
             item.store()
-            log.debug('%s: computed checksum for %s using %s',
+            log.debug(u'{0}: computed checksum for {1} using {2}',
                       PLUGIN, item.title, key)
-        except Exception as e:
-            log.debug('%s: failed to checksum %s: %s',
+        except subprocess.CalledProcessError as e:
+            log.debug(u'{0}: failed to checksum {1}: {2}',
                       PLUGIN, displayable_path(item.path), e)
     else:
-        log.debug('%s: key %s on item %s cached: not computing checksum',
+        log.debug(u'{0}: key {1} on item {2} cached: not computing checksum',
                   PLUGIN, key, displayable_path(item.path))
     return key, checksum
 
 
-def _group_by(objs, keys):
-    """Return a dictionary whose keys are arbitrary concatenations of attributes
-    and whose values are lists of objects (Albums or Items) with those keys.
+def _group_by(objs, keys, log):
+    """Return a dictionary with keys arbitrary concatenations of attributes and
+    values lists of objects (Albums or Items) with those keys.
     """
     import collections
     counts = collections.defaultdict(list)
     for obj in objs:
-        key = '\001'.join(repr(getattr(obj, k, '')) for k in keys)
-        counts[key].append(obj)
+        values = [getattr(obj, k, None) for k in keys]
+        values = [v for v in values if v not in (None, '')]
+        if values:
+            key = '\001'.join(values)
+            counts[key].append(obj)
+        else:
+            log.debug(u'{0}: all keys {1} on item {2} are null: skipping',
+                      PLUGIN, keys, displayable_path(obj.path))
+
     return counts
 
 
-def _duplicates(objs, keys, full):
-    """Generate triples of MBIDs, duplicate counts, and constituent
-    objects.
+def _duplicates(objs, keys, full, log):
+    """Generate triples of keys, duplicate counts, and constituent objects.
     """
     offset = 0 if full else 1
-    for mbid, objs in _group_by(objs, keys).iteritems():
+    for k, objs in _group_by(objs, keys, log).iteritems():
         if len(objs) > 1:
-            yield (mbid, len(objs) - offset, objs[offset:])
+            yield (k, len(objs) - offset, objs[offset:])
 
 
 class DuplicatesPlugin(BeetsPlugin):
@@ -118,17 +125,6 @@ class DuplicatesPlugin(BeetsPlugin):
         self._command = Subcommand('duplicates',
                                    help=__doc__,
                                    aliases=['dup'])
-
-        self._command.parser.add_option('-f', '--format', dest='format',
-                                        action='store', type='string',
-                                        help='print with custom format',
-                                        metavar='FMT')
-
-        self._command.parser.add_option('-a', '--album', dest='album',
-                                        action='store_true',
-                                        help='show duplicate albums instead of'
-                                        ' tracks')
-
         self._command.parser.add_option('-c', '--count', dest='count',
                                         action='store_true',
                                         help='show duplicate counts')
@@ -161,17 +157,14 @@ class DuplicatesPlugin(BeetsPlugin):
                                         action='store', metavar='DEST',
                                         help='copy items to dest')
 
-        self._command.parser.add_option('-p', '--path', dest='path',
-                                        action='store_true',
-                                        help='print paths for matched items or'
-                                        ' albums')
-
         self._command.parser.add_option('-t', '--tag', dest='tag',
                                         action='store',
                                         help='tag matched items with \'k=v\''
                                         ' attribute')
+        self._command.parser.add_all_common_options()
 
     def commands(self):
+
         def _dup(lib, opts, args):
             self.config.set_args(opts)
             fmt = self.config['format'].get()
@@ -202,13 +195,18 @@ class DuplicatesPlugin(BeetsPlugin):
                 fmt += ': {0}'
 
             if checksum:
+                if not isinstance(checksum, basestring):
+                    raise UserError(
+                        'duplicates: "checksum" option must be a command'
+                    )
                 for i in items:
-                    k, _ = _checksum(i, checksum)
-                keys = ['k']
+                    k, _ = self._checksum(i, checksum, self._log)
+                keys = [k]
 
             for obj_id, obj_count, objs in _duplicates(items,
                                                        keys=keys,
-                                                       full=full):
+                                                       full=full,
+                                                       log=self._log):
                 if obj_id:  # Skip empty IDs.
                     for o in objs:
                         _process_item(o, lib,
@@ -216,7 +214,7 @@ class DuplicatesPlugin(BeetsPlugin):
                                       move=move,
                                       delete=delete,
                                       tag=tag,
-                                      format=fmt.format(obj_count))
+                                      fmt=fmt.format(obj_count))
 
         self._command.func = _dup
         return [self._command]
