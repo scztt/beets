@@ -14,9 +14,9 @@
 
 """List missing tracks.
 """
-import logging, sys
 from __future__ import (division, absolute_import, print_function,
                         unicode_literals)
+import logging, sys
 
 from beets.autotag import hooks
 from beets.library import Item
@@ -118,7 +118,7 @@ class MissingPlugin(BeetsPlugin):
             # Default format string for count mode.
             if count and not fmt:
                 fmt = '$albumartist - $album: $missing'
-                print fmt
+                print (fmt)
 
             for album in albums:
                 if count:
