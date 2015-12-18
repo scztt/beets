@@ -264,6 +264,7 @@ class DiscogsPlugin(BeetsPlugin):
         tracks = []
         index_tracks = {}
         index = 0
+
         for track in tracklist:
             # Only real tracks have `position`. Otherwise, it's an index track.
             if track['position']:
@@ -271,6 +272,11 @@ class DiscogsPlugin(BeetsPlugin):
                 tracks.append(self.get_track_info(track, index))
             else:
                 index_tracks[index + 1] = track['title']
+                if track.get('sub_tracks'):
+                    for subtrack in track['sub_tracks']:
+                        index += 1
+                        subtrack['title'] = '{0}: {1}'.format(track['title'], subtrack['title'])
+                        tracks.append(self.get_track_info(subtrack, index))
 
         # Fix up medium and medium_index for each track. Discogs position is
         # unreliable, but tracks are in order.
