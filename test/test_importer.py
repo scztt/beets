@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -329,6 +330,7 @@ class NonAutotaggedImportTest(_common.TestCase, ImportHelper):
         self.importer.run()
         self.assertNotExists(os.path.join(self.import_dir, 'the_album'))
 
+    @unittest.skipUnless(_common.HAVE_SYMLINK, "need symlinks")
     def test_import_link_arrives(self):
         config['import']['link'] = True
         self.importer.run()
@@ -1462,51 +1464,51 @@ class MultiDiscAlbumsInDirTest(_common.TestCase):
     def test_coalesce_nested_album_multiple_subdirs(self):
         self.create_music()
         albums = list(albums_in_dir(self.base))
-        self.assertEquals(len(albums), 4)
+        self.assertEqual(len(albums), 4)
         root, items = albums[0]
-        self.assertEquals(root, self.dirs[0:3])
-        self.assertEquals(len(items), 3)
+        self.assertEqual(root, self.dirs[0:3])
+        self.assertEqual(len(items), 3)
 
     def test_coalesce_nested_album_single_subdir(self):
         self.create_music()
         albums = list(albums_in_dir(self.base))
         root, items = albums[1]
-        self.assertEquals(root, self.dirs[3:5])
-        self.assertEquals(len(items), 1)
+        self.assertEqual(root, self.dirs[3:5])
+        self.assertEqual(len(items), 1)
 
     def test_coalesce_flattened_album_case_typo(self):
         self.create_music()
         albums = list(albums_in_dir(self.base))
         root, items = albums[2]
-        self.assertEquals(root, self.dirs[6:8])
-        self.assertEquals(len(items), 2)
+        self.assertEqual(root, self.dirs[6:8])
+        self.assertEqual(len(items), 2)
 
     def test_single_disc_album(self):
         self.create_music()
         albums = list(albums_in_dir(self.base))
         root, items = albums[3]
-        self.assertEquals(root, self.dirs[8:])
-        self.assertEquals(len(items), 1)
+        self.assertEqual(root, self.dirs[8:])
+        self.assertEqual(len(items), 1)
 
     def test_do_not_yield_empty_album(self):
         self.create_music(files=False)
         albums = list(albums_in_dir(self.base))
-        self.assertEquals(len(albums), 0)
+        self.assertEqual(len(albums), 0)
 
     def test_single_disc_unicode(self):
         self.create_music(ascii=False)
         albums = list(albums_in_dir(self.base))
         root, items = albums[3]
-        self.assertEquals(root, self.dirs[8:])
-        self.assertEquals(len(items), 1)
+        self.assertEqual(root, self.dirs[8:])
+        self.assertEqual(len(items), 1)
 
     def test_coalesce_multiple_unicode(self):
         self.create_music(ascii=False)
         albums = list(albums_in_dir(self.base))
-        self.assertEquals(len(albums), 4)
+        self.assertEqual(len(albums), 4)
         root, items = albums[0]
-        self.assertEquals(root, self.dirs[0:3])
-        self.assertEquals(len(items), 3)
+        self.assertEqual(root, self.dirs[0:3])
+        self.assertEqual(len(items), 3)
 
 
 class ReimportTest(unittest.TestCase, ImportHelper):
@@ -1590,6 +1592,21 @@ class ReimportTest(unittest.TestCase, ImportHelper):
         self._setup_session(True)
         self.importer.run()
         self.assertEqual(self._item().added, 4747.0)
+
+    def test_reimported_item_preserves_art(self):
+        self._setup_session()
+        art_source = os.path.join(_common.RSRC, 'abbey.jpg')
+        replaced_album = self._album()
+        replaced_album.set_art(art_source)
+        replaced_album.store()
+        old_artpath = replaced_album.artpath
+        self.importer.run()
+        new_album = self._album()
+        new_artpath = new_album.art_destination(art_source)
+        self.assertEqual(new_album.artpath, new_artpath)
+        self.assertTrue(os.path.exists(new_artpath))
+        if new_artpath != old_artpath:
+            self.assertFalse(os.path.exists(old_artpath))
 
 
 class ImportPretendTest(_common.TestCase, ImportHelper):

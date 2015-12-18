@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """Populate an item's `added` and `mtime` fields by using the file
 modification time (mtime) of the item's source file before import.
 
@@ -9,6 +11,7 @@ from __future__ import (unicode_literals, absolute_import, print_function,
 import os
 
 from beets import util
+from beets import importer
 from beets.plugins import BeetsPlugin
 
 
@@ -52,9 +55,11 @@ class ImportAddedPlugin(BeetsPlugin):
                 session.config['link']):
             self._log.debug(u"In place import detected, recording mtimes from "
                             u"source paths")
-            if task.items:
-                for item in task.items:
-                    self.record_import_mtime(item, item.path, item.path)
+            items = [task.item] \
+                if isinstance(task, importer.SingletonImportTask) \
+                else task.items
+            for item in items:
+                self.record_import_mtime(item, item.path, item.path)
 
     def record_reimported(self, task, session):
         self.reimported_item_ids = set(item.id for item, replaced_items
@@ -72,11 +77,6 @@ class ImportAddedPlugin(BeetsPlugin):
         """Write the given mtime to an item's `mtime` field and to the mtime
         of the item's file.
         """
-        if mtime is None:
-            self._log.warn(u"No mtime to be preserved for item '{0}'",
-                           util.displayable_path(item.path))
-            return
-
         # The file's mtime on disk must be in sync with the item's mtime
         self.write_file_mtime(util.syspath(item.path), mtime)
         item.mtime = mtime
@@ -112,10 +112,10 @@ class ImportAddedPlugin(BeetsPlugin):
                     self.write_item_mtime(item, mtime)
                     item.store()
         if album_mtimes:
-            album.added = min(album_mtimes)
-            self._log.debug(u"Import of album '{0}', selected album.added={1} "
+        album.added = min(album_mtimes)
+        self._log.debug(u"Import of album '{0}', selected album.added={1} "
                         u"from item file mtimes.", album.album, album.added)
-            album.store()
+        album.store()
 
     def update_item_times(self, lib, item):
         if self.reimported_item(item):

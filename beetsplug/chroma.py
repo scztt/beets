@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -133,6 +134,7 @@ class AcoustidPlugin(plugins.BeetsPlugin):
         self.config.add({
             'auto': True,
         })
+        config['acoustid']['apikey'].redact = True
 
         if self.config['auto']:
             self.register_listener('import_task_start', self.fingerprint_task)
@@ -193,8 +195,7 @@ class AcoustidPlugin(plugins.BeetsPlugin):
 
         def fingerprint_cmd_func(lib, opts, args):
             for item in lib.items(ui.decargs(args)):
-                fingerprint_item(self._log, item,
-                                 write=config['import']['write'].get(bool))
+                fingerprint_item(self._log, item, write=ui.should_write())
         fingerprint_cmd.func = fingerprint_cmd_func
 
         return [submit_cmd, fingerprint_cmd]

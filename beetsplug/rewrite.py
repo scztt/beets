@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -69,4 +70,7 @@ class RewritePlugin(BeetsPlugin):
 
         # Replace each template field with the new rewriter function.
         for fieldname, fieldrules in rules.iteritems():
-            self.template_fields[fieldname] = rewriter(fieldname, fieldrules)
+            getter = rewriter(fieldname, fieldrules)
+            self.template_fields[fieldname] = getter
+            if fieldname in library.Album._fields:
+                self.album_template_fields[fieldname] = getter

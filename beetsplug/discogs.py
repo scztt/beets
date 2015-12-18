@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -20,6 +21,7 @@ from __future__ import (division, absolute_import, print_function,
 
 import beets.ui
 from beets import logging
+from beets import config
 from beets.autotag.hooks import AlbumInfo, TrackInfo, Distance
 from beets.plugins import BeetsPlugin
 from beets.util import confit
@@ -43,7 +45,8 @@ USER_AGENT = u'beets/{0} +http://beets.radbox.org/'.format(beets.__version__)
 
 # Exceptions that discogs_client should really handle but does not.
 CONNECTION_ERRORS = (ConnectionError, socket.error, httplib.HTTPException,
-                     ValueError)  # JSON decoding raises a ValueError.
+                     ValueError,  # JSON decoding raises a ValueError.
+                     DiscogsAPIError)
 
 
 class DiscogsPlugin(BeetsPlugin):
@@ -56,6 +59,8 @@ class DiscogsPlugin(BeetsPlugin):
             'tokenfile': 'discogs_token.json',
             'source_weight': 0.5,
         })
+        self.config['apikey'].redact = True
+        self.config['apisecret'].redact = True
         self.discogs_client = None
         self.register_listener('import_begin', self.setup)
 
@@ -93,7 +98,12 @@ class DiscogsPlugin(BeetsPlugin):
     def authenticate(self, c_key, c_secret):
         # Get the link for the OAuth page.
         auth_client = Client(USER_AGENT, c_key, c_secret)
-        _, _, url = auth_client.get_authorize_url()
+        try:
+            _, _, url = auth_client.get_authorize_url()
+        except CONNECTION_ERRORS as e:
+            self._log.debug('connection error: {0}', e)
+            raise beets.ui.UserError('communication with Discogs failed')
+
         beets.ui.print_("To authenticate with Discogs, visit:")
         beets.ui.print_(url)
 
@@ -105,7 +115,7 @@ class DiscogsPlugin(BeetsPlugin):
             raise beets.ui.UserError('Discogs authorization failed')
         except CONNECTION_ERRORS as e:
             self._log.debug(u'connection error: {0}', e)
-            raise beets.ui.UserError('communication with Discogs failed')
+            raise beets.ui.UserError('Discogs token request failed')
 
         # Save the token for later use.
         self._log.debug('Discogs token {0}, secret {1}', token, secret)
@@ -145,7 +155,7 @@ class DiscogsPlugin(BeetsPlugin):
                 self.reset_auth()
                 results = self.candidates(items, artist, album, va_likely)
         except CONNECTION_ERRORS as e:
-            self._log.debug(u'HTTP Connection Error: {0}', e)
+            self._log.debug('Connection error in album search', exc_info=True)
 
         return results
 
@@ -176,8 +186,8 @@ class DiscogsPlugin(BeetsPlugin):
                     self.reset_auth()
                     return self.album_for_id(album_id)
             return None
-        except CONNECTION_ERRORS as e:
-            self._log.debug(u'HTTP Connection Error: {0}', e)
+        except CONNECTION_ERRORS:
+            self._log.debug('Connection error in album lookup', exc_info=True)
             return None
         return self.get_album_info(result)
 
@@ -198,9 +208,9 @@ class DiscogsPlugin(BeetsPlugin):
         try:
             releases = self.discogs_client.search(query,
                                                   type='release').page(1)
-        except CONNECTION_ERRORS as exc:
-            self._log.debug("Communication error while searching for {0!r}: "
-                            "{1}".format(query, exc))
+        except CONNECTION_ERRORS:
+            self._log.debug("Communication error while searching for {0!r}",
+                            query, exc_info=True)
             return []
         return [self.get_album_info(release) for release in releases[:5]]
 
@@ -218,6 +228,8 @@ class DiscogsPlugin(BeetsPlugin):
         albumtype = ', '.join(
             result.data['formats'][0].get('descriptions', [])) or None
         va = result.data['artists'][0]['name'].lower() == 'various'
+        if va:
+            artist = config['va_name'].get(unicode)
         year = result.data['year']
         label = result.data['labels'][0]['name']
         mediums = len(set(t.medium for t in tracks))

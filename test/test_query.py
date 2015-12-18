@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -18,6 +19,8 @@ from __future__ import (division, absolute_import, print_function,
                         unicode_literals)
 
 from functools import partial
+from mock import patch
+import os
 
 from test import _common
 from test._common import unittest
@@ -59,6 +62,16 @@ class AnyFieldQueryTest(_common.LibTestCase):
         q = dbcore.query.AnyFieldQuery('title', ['artist'],
                                        dbcore.query.SubstringQuery)
         self.assertEqual(self.lib.items(q).get(), None)
+
+    def test_eq(self):
+        q1 = dbcore.query.AnyFieldQuery('foo', ['bar'],
+                                        dbcore.query.SubstringQuery)
+        q2 = dbcore.query.AnyFieldQuery('foo', ['bar'],
+                                        dbcore.query.SubstringQuery)
+        self.assertEqual(q1, q2)
+
+        q2.query_class = None
+        self.assertNotEqual(q1, q2)
 
 
 class AssertsMixin(object):
@@ -344,6 +357,16 @@ class MatchTest(_common.TestCase):
     def test_open_range(self):
         dbcore.query.NumericQuery('bitrate', '100000..')
 
+    def test_eq(self):
+        q1 = dbcore.query.MatchQuery('foo', 'bar')
+        q2 = dbcore.query.MatchQuery('foo', 'bar')
+        q3 = dbcore.query.MatchQuery('foo', 'baz')
+        q4 = dbcore.query.StringFieldQuery('foo', 'bar')
+        self.assertEqual(q1, q2)
+        self.assertNotEqual(q1, q3)
+        self.assertNotEqual(q1, q4)
+        self.assertNotEqual(q3, q4)
+
 
 class PathQueryTest(_common.LibTestCase, TestHelper, AssertsMixin):
     def setUp(self):
@@ -353,6 +376,21 @@ class PathQueryTest(_common.LibTestCase, TestHelper, AssertsMixin):
         self.i.album = 'path album'
         self.i.store()
         self.lib.add_album([self.i])
+
+        self.patcher_exists = patch('beets.library.os.path.exists')
+        self.patcher_exists.start().return_value = True
+
+        # We have to create function samefile as it does not exist on
+        # Windows and python 2.7
+        self.patcher_samefile = patch('beets.library.os.path.samefile',
+                                      create=True)
+        self.patcher_samefile.start().return_value = True
+
+    def tearDown(self):
+        super(PathQueryTest, self).tearDown()
+
+        self.patcher_samefile.stop()
+        self.patcher_exists.stop()
 
     def test_path_exact_match(self):
         q = 'path:/a/b/c.mp3'
@@ -474,14 +512,76 @@ class PathQueryTest(_common.LibTestCase, TestHelper, AssertsMixin):
         results = self.lib.items(makeq(case_sensitive=False))
         self.assert_items_matched(results, ['path item', 'caps path'])
 
-        # test platform-aware default sensitivity
+        # Check for correct case sensitivity selection (this check
+        # only works on non-Windows OSes).
         with _common.system_mock('Darwin'):
-            q = makeq()
-            self.assertEqual(q.case_sensitive, True)
-
-        with _common.system_mock('Windows'):
+            # exists = True and samefile = True => Case insensitive
             q = makeq()
             self.assertEqual(q.case_sensitive, False)
+
+            # exists = True and samefile = False => Case sensitive
+            self.patcher_samefile.stop()
+            self.patcher_samefile.start().return_value = False
+            try:
+                q = makeq()
+                self.assertEqual(q.case_sensitive, True)
+            finally:
+                self.patcher_samefile.stop()
+                self.patcher_samefile.start().return_value = True
+
+        # Test platform-aware default sensitivity when the library path
+        # does not exist. For the duration of this check, we change the
+        # `os.path.exists` mock to return False.
+        self.patcher_exists.stop()
+        self.patcher_exists.start().return_value = False
+        try:
+            with _common.system_mock('Darwin'):
+                q = makeq()
+                self.assertEqual(q.case_sensitive, True)
+
+            with _common.system_mock('Windows'):
+                q = makeq()
+                self.assertEqual(q.case_sensitive, False)
+        finally:
+            # Restore the `os.path.exists` mock to its original state.
+            self.patcher_exists.stop()
+            self.patcher_exists.start().return_value = True
+
+    @patch('beets.library.os')
+    def test_path_sep_detection(self, mock_os):
+        mock_os.sep = '/'
+        is_path = beets.library.PathQuery.is_path_query
+        self.assertTrue(is_path('/foo/bar'))
+        self.assertTrue(is_path('foo/bar'))
+        self.assertTrue(is_path('foo/'))
+        self.assertFalse(is_path('foo'))
+        self.assertTrue(is_path('foo/:bar'))
+        self.assertFalse(is_path('foo:bar/'))
+        self.assertFalse(is_path('foo:/bar'))
+
+    def test_path_detection(self):
+        # cover existence test
+        self.patcher_exists.stop()
+        is_path = beets.library.PathQuery.is_path_query
+
+        try:
+            self.touch(b'foo/bar')
+            # test absolute
+            self.assertTrue(is_path(os.path.join(self.temp_dir, b'foo/bar')))
+            self.assertTrue(is_path(os.path.join(self.temp_dir, b'foo')))
+            self.assertFalse(is_path(b'foo/bar'))
+
+            cur_dir = os.getcwd()
+            try:
+                os.chdir(self.temp_dir)
+                self.assertTrue(is_path(b'foo/'))
+                self.assertTrue(is_path(b'foo/bar'))
+                self.assertTrue(is_path(b'foo/bar:tagada'))
+                self.assertFalse(is_path(b'bar'))
+            finally:
+                os.chdir(cur_dir)
+        finally:
+            self.patcher_exists.start()
 
 
 class IntQueryTest(unittest.TestCase, TestHelper):
@@ -616,6 +716,243 @@ class NoneQueryTest(unittest.TestCase, TestHelper):
         item.store()
         matched = self.lib.items(NoneQuery('rg_track_gain'))
         self.assertInResult(item, matched)
+
+
+class NotQueryMatchTest(_common.TestCase):
+    """Test `query.NotQuery` matching against a single item, using the same
+    cases and assertions as on `MatchTest`, plus assertion on the negated
+    queries (ie. assertTrue(q) -> assertFalse(NotQuery(q))).
+    """
+    def setUp(self):
+        super(NotQueryMatchTest, self).setUp()
+        self.item = _common.item()
+
+    def test_regex_match_positive(self):
+        q = dbcore.query.RegexpQuery('album', '^the album$')
+        self.assertTrue(q.match(self.item))
+        self.assertFalse(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_regex_match_negative(self):
+        q = dbcore.query.RegexpQuery('album', '^album$')
+        self.assertFalse(q.match(self.item))
+        self.assertTrue(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_regex_match_non_string_value(self):
+        q = dbcore.query.RegexpQuery('disc', '^6$')
+        self.assertTrue(q.match(self.item))
+        self.assertFalse(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_substring_match_positive(self):
+        q = dbcore.query.SubstringQuery('album', 'album')
+        self.assertTrue(q.match(self.item))
+        self.assertFalse(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_substring_match_negative(self):
+        q = dbcore.query.SubstringQuery('album', 'ablum')
+        self.assertFalse(q.match(self.item))
+        self.assertTrue(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_substring_match_non_string_value(self):
+        q = dbcore.query.SubstringQuery('disc', '6')
+        self.assertTrue(q.match(self.item))
+        self.assertFalse(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_year_match_positive(self):
+        q = dbcore.query.NumericQuery('year', '1')
+        self.assertTrue(q.match(self.item))
+        self.assertFalse(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_year_match_negative(self):
+        q = dbcore.query.NumericQuery('year', '10')
+        self.assertFalse(q.match(self.item))
+        self.assertTrue(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_bitrate_range_positive(self):
+        q = dbcore.query.NumericQuery('bitrate', '100000..200000')
+        self.assertTrue(q.match(self.item))
+        self.assertFalse(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_bitrate_range_negative(self):
+        q = dbcore.query.NumericQuery('bitrate', '200000..300000')
+        self.assertFalse(q.match(self.item))
+        self.assertTrue(dbcore.query.NotQuery(q).match(self.item))
+
+    def test_open_range(self):
+        q = dbcore.query.NumericQuery('bitrate', '100000..')
+        dbcore.query.NotQuery(q)
+
+
+class NotQueryTest(DummyDataTestCase):
+    """Test `query.NotQuery` against the dummy data:
+    - `test_type_xxx`: tests for the negation of a particular XxxQuery class.
+    - `test_get_yyy`: tests on query strings (similar to `GetTest`)
+    """
+    def assertNegationProperties(self, q):
+        """Given a Query `q`, assert that:
+        - q OR not(q) == all items
+        - q AND not(q) == 0
+        - not(not(q)) == q
+        """
+        not_q = dbcore.query.NotQuery(q)
+        # assert using OrQuery, AndQuery
+        q_or = dbcore.query.OrQuery([q, not_q])
+        q_and = dbcore.query.AndQuery([q, not_q])
+        self.assert_items_matched_all(self.lib.items(q_or))
+        self.assert_items_matched(self.lib.items(q_and), [])
+
+        # assert manually checking the item titles
+        all_titles = set([i.title for i in self.lib.items()])
+        q_results = set([i.title for i in self.lib.items(q)])
+        not_q_results = set([i.title for i in self.lib.items(not_q)])
+        self.assertEqual(q_results.union(not_q_results), all_titles)
+        self.assertEqual(q_results.intersection(not_q_results), set())
+
+        # round trip
+        not_not_q = dbcore.query.NotQuery(not_q)
+        self.assertEqual(set([i.title for i in self.lib.items(q)]),
+                         set([i.title for i in self.lib.items(not_not_q)]))
+
+    def test_type_and(self):
+        # not(a and b) <-> not(a) or not(b)
+        q = dbcore.query.AndQuery([dbcore.query.BooleanQuery('comp', True),
+                                   dbcore.query.NumericQuery('year', '2002')])
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['foo bar', 'beets 4 eva'])
+        self.assertNegationProperties(q)
+
+    def test_type_anyfield(self):
+        q = dbcore.query.AnyFieldQuery('foo', ['title', 'artist', 'album'],
+                                       dbcore.query.SubstringQuery)
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['baz qux'])
+        self.assertNegationProperties(q)
+
+    def test_type_boolean(self):
+        q = dbcore.query.BooleanQuery('comp', True)
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['beets 4 eva'])
+        self.assertNegationProperties(q)
+
+    def test_type_date(self):
+        q = dbcore.query.DateQuery('mtime', '0.0')
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, [])
+        self.assertNegationProperties(q)
+
+    def test_type_false(self):
+        q = dbcore.query.FalseQuery()
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched_all(not_results)
+        self.assertNegationProperties(q)
+
+    def test_type_match(self):
+        q = dbcore.query.MatchQuery('year', '2003')
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['foo bar', 'baz qux'])
+        self.assertNegationProperties(q)
+
+    def test_type_none(self):
+        q = dbcore.query.NoneQuery('rg_track_gain')
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, [])
+        self.assertNegationProperties(q)
+
+    def test_type_numeric(self):
+        q = dbcore.query.NumericQuery('year', '2001..2002')
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['beets 4 eva'])
+        self.assertNegationProperties(q)
+
+    def test_type_or(self):
+        # not(a or b) <-> not(a) and not(b)
+        q = dbcore.query.OrQuery([dbcore.query.BooleanQuery('comp', True),
+                                  dbcore.query.NumericQuery('year', '2002')])
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['beets 4 eva'])
+        self.assertNegationProperties(q)
+
+    def test_type_regexp(self):
+        q = dbcore.query.RegexpQuery('artist', '^t')
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['foo bar'])
+        self.assertNegationProperties(q)
+
+    def test_type_substring(self):
+        q = dbcore.query.SubstringQuery('album', 'ba')
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, ['beets 4 eva'])
+        self.assertNegationProperties(q)
+
+    def test_type_true(self):
+        q = dbcore.query.TrueQuery()
+        not_results = self.lib.items(dbcore.query.NotQuery(q))
+        self.assert_items_matched(not_results, [])
+        self.assertNegationProperties(q)
+
+    def test_get_prefixes_keyed(self):
+        """Test both negation prefixes on a keyed query."""
+        q0 = '-title:qux'
+        q1 = '^title:qux'
+        results0 = self.lib.items(q0)
+        results1 = self.lib.items(q1)
+        self.assert_items_matched(results0, ['foo bar', 'beets 4 eva'])
+        self.assert_items_matched(results1, ['foo bar', 'beets 4 eva'])
+
+    def test_get_prefixes_unkeyed(self):
+        """Test both negation prefixes on an unkeyed query."""
+        q0 = '-qux'
+        q1 = '^qux'
+        results0 = self.lib.items(q0)
+        results1 = self.lib.items(q1)
+        self.assert_items_matched(results0, ['foo bar', 'beets 4 eva'])
+        self.assert_items_matched(results1, ['foo bar', 'beets 4 eva'])
+
+    def test_get_one_keyed_regexp(self):
+        q = r'-artist::t.+r'
+        results = self.lib.items(q)
+        self.assert_items_matched(results, ['foo bar', 'baz qux'])
+
+    def test_get_one_unkeyed_regexp(self):
+        q = r'-:x$'
+        results = self.lib.items(q)
+        self.assert_items_matched(results, ['foo bar', 'beets 4 eva'])
+
+    def test_get_multiple_terms(self):
+        q = 'baz -bar'
+        results = self.lib.items(q)
+        self.assert_items_matched(results, ['baz qux'])
+
+    def test_get_mixed_terms(self):
+        q = 'baz -title:bar'
+        results = self.lib.items(q)
+        self.assert_items_matched(results, ['baz qux'])
+
+    def test_fast_vs_slow(self):
+        """Test that the results are the same regardless of the `fast` flag
+        for negated `FieldQuery`s.
+
+        TODO: investigate NoneQuery(fast=False), as it is raising
+        AttributeError: type object 'NoneQuery' has no attribute 'field'
+        at NoneQuery.match() (due to being @classmethod, and no self?)
+        """
+        classes = [(dbcore.query.DateQuery, ['mtime', '0.0']),
+                   (dbcore.query.MatchQuery, ['artist', 'one']),
+                   # (dbcore.query.NoneQuery, ['rg_track_gain']),
+                   (dbcore.query.NumericQuery, ['year', '2002']),
+                   (dbcore.query.StringFieldQuery, ['year', '2001']),
+                   (dbcore.query.RegexpQuery, ['album', '^.a']),
+                   (dbcore.query.SubstringQuery, ['title', 'x'])]
+
+        for klass, args in classes:
+            q_fast = dbcore.query.NotQuery(klass(*(args + [True])))
+            q_slow = dbcore.query.NotQuery(klass(*(args + [False])))
+
+            try:
+                self.assertEqual([i.title for i in self.lib.items(q_fast)],
+                                 [i.title for i in self.lib.items(q_slow)])
+            except NotImplementedError:
+                # ignore classes that do not provide `fast` implementation
+                pass
 
 
 def suite():

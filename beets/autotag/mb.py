@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -215,7 +216,12 @@ def album_info(release):
     for medium in release['medium-list']:
         disctitle = medium.get('title')
         format = medium.get('format')
-        for track in medium['track-list']:
+
+        all_tracks = medium['track-list']
+        if 'pregap' in medium:
+            all_tracks.insert(0, medium['pregap'])
+
+        for track in all_tracks:
             # Basic information from the recording.
             index += 1
             ti = track_info(
@@ -254,6 +260,8 @@ def album_info(release):
         data_url=album_url(release['id']),
     )
     info.va = info.artist_id == VARIOUS_ARTISTS_ID
+    if info.va:
+        info.artist = config['va_name'].get(unicode)
     info.asin = release.get('asin')
     info.releasegroup_id = release['release-group']['id']
     info.country = release.get('country')

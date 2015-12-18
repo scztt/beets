@@ -13,7 +13,7 @@ Using Plugins
 -------------
 
 To use one of the plugins included with beets (see the rest of this page for a
-list), just use the `plugins` option in your :doc:`config.yaml </reference/config>`: file, like so::
+list), just use the `plugins` option in your :doc:`config.yaml </reference/config>` file, like so::
 
     plugins: inline convert web
 
@@ -31,6 +31,7 @@ Each plugin has its own set of options that can be defined in a section bearing 
 .. toctree::
    :hidden:
 
+   badfiles
    bpd
    bpm
    bucket
@@ -39,23 +40,27 @@ Each plugin has its own set of options that can be defined in a section bearing 
    discogs
    duplicates
    echonest
+   edit
    embedart
+   embyupdate
    fetchart
-   freedesktop
    fromfilename
    ftintitle
    fuzzy
+   freedesktop
    ihate
    importadded
    importfeeds
    info
    inline
+   ipfs
    keyfinder
    lastgenre
    lastimport
    lyrics
    mbcollection
    mbsync
+   metasync
    missing
    mpdstats
    mpdupdate
@@ -70,6 +75,7 @@ Each plugin has its own set of options that can be defined in a section bearing 
    smartplaylist
    spotify
    the
+   thumbnails
    types
    web
    zero
@@ -91,6 +97,7 @@ Metadata
 * :doc:`bpm`: Measure tempo using keystrokes.
 * :doc:`echonest`: Automatically fetch `acoustic attributes`_ from
   `the Echo Nest`_ (tempo, energy, danceability, ...).
+* :doc:`edit`: Edit metadata from a texteditor.
 * :doc:`embedart`: Embed album art images into files' metadata.
 * :doc:`fetchart`: Fetch album cover art from various sources.
 * :doc:`ftintitle`: Move "featured" artists from the artist field to the title
@@ -103,6 +110,7 @@ Metadata
 * :doc:`lastimport`: Collect play counts from Last.fm.
 * :doc:`lyrics`: Automatically fetch song lyrics.
 * :doc:`mbsync`: Fetch updated metadata from MusicBrainz
+* :doc:`metasync`: Fetch metadata from local or remote sources
 * :doc:`mpdstats`: Connect to `MPD`_ and update the beets library with play
   statistics (last_played, play_count, skip_count, rating).
 * :doc:`replaygain`: Calculate volume normalization for players that support it.
@@ -126,16 +134,20 @@ Path Formats
 Interoperability
 ----------------
 
-* :doc:`freedesktop`: Create .directory files in album folders.
+* :doc:`embyupdate`: Automatically notifies `Emby`_ whenever the beets library changes.
 * :doc:`importfeeds`: Keep track of imported files via ``.m3u`` playlist file(s) or symlinks.
+* :doc:`ipfs`: Import libraries from friends and get albums from them via ipfs.
 * :doc:`mpdupdate`: Automatically notifies `MPD`_ whenever the beets library
   changes.
 * :doc:`play`: Play beets queries in your music player.
 * :doc:`plexupdate`: Automatically notifies `Plex`_ whenever the beets library
   changes.
 * :doc:`smartplaylist`: Generate smart playlists based on beets queries.
+* :doc:`thumbnails`: Get thumbnails with the cover art on your album folders.
+* :doc:`badfiles`: Check audio file integrity.
 
 
+.. _Emby: http://emby.media
 .. _Plex: http://plex.tv
 
 Miscellaneous
@@ -202,11 +214,19 @@ Here are a few of the plugins written by the beets community:
 
 * `beets-follow`_ lets you check for new albums from artists you like.
 
+* `beets-setlister`_ generate playlists from the setlists of a given artist.
+
+* `beets-noimport`_ adds and removes directories from the incremental import skip list.
+
+* `whatlastgenre`_ fetches genres from various music sites.
+
+* `beets-usertag`_ lets you use keywords to tag and organize your music.
+
 .. _beets-check: https://github.com/geigerzaehler/beets-check
 .. _copyartifacts: https://github.com/sbarakat/beets-copyartifacts
 .. _dsedivec: https://github.com/dsedivec/beets-plugins
 .. _beets-artistcountry: https://github.com/agrausem/beets-artistcountry
-.. _beetFs: http://code.google.com/p/beetfs/
+.. _beetFs: https://code.google.com/p/beetfs/
 .. _Beet-MusicBrainz-Collection:
     https://github.com/jeffayle/Beet-MusicBrainz-Collection/
 .. _A cmus plugin:
@@ -215,3 +235,7 @@ Here are a few of the plugins written by the beets community:
 .. _beet-amazon: https://github.com/jmwatte/beet-amazon
 .. _beets-alternatives: https://github.com/geigerzaehler/beets-alternatives
 .. _beets-follow: https://github.com/nolsto/beets-follow
+.. _beets-setlister: https://github.com/tomjaspers/beets-setlister
+.. _beets-noimport: https://github.com/ttsda/beets-noimport
+.. _whatlastgenre: https://github.com/YetAnotherNerd/whatlastgenre/tree/master/plugin/beets
+.. _beets-usertag: https://github.com/igordertigor/beets-usertag

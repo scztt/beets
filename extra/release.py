@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """A utility script for automating the beets release process.
 """
-from __future__ import division, absolute_import, print_function
-
 import click
 import os
 import re
@@ -190,7 +190,19 @@ def changelog_as_markdown():
     # Command links with command names.
     rst = re.sub(r':ref:`(\w+)-cmd`', r'``\1``', rst)
 
-    return rst2md(rst)
+    # Bug numbers.
+    rst = re.sub(r':bug:`(\d+)`', r'#\1', rst)
+
+    # Users.
+    rst = re.sub(r':user:`(\w+)`', r'@\1', rst)
+
+    # Convert with Pandoc.
+    md = rst2md(rst)
+
+    # Restore escaped issue numbers.
+    md = re.sub(r'\\#(\d+)\b', r'#\1', md)
+
+    return md
 
 
 @release.command()
@@ -277,7 +289,7 @@ def prep():
     # FIXME It should be possible to specify this as an argument.
     version_parts = [int(n) for n in cur_version.split('.')]
     version_parts[-1] += 1
-    next_version = u'.'.join(map(unicode, version_parts))
+    next_version = u'.'.join(map(str, version_parts))
     bump_version(next_version)
 
 
@@ -292,6 +304,7 @@ def publish():
 
     # Push to GitHub.
     with chdir(BASE):
+        subprocess.check_call(['git', 'push'])
         subprocess.check_call(['git', 'push', '--tags'])
 
     # Upload to PyPI.
@@ -299,5 +312,5 @@ def publish():
     subprocess.check_call(['twine', 'upload', path])
 
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     release()

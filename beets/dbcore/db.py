@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -34,7 +35,7 @@ from .query import MatchQuery, NullSort, TrueQuery
 class FormattedMapping(collections.Mapping):
     """A `dict`-like formatted view of a model.
 
-    The accessor `mapping[key]` returns the formated version of
+    The accessor `mapping[key]` returns the formatted version of
     `model[key]` as a unicode string.
 
     If `for_path` is true, all path separators in the formatted values
@@ -271,6 +272,13 @@ class Model(object):
         else:
             return base_keys
 
+    @classmethod
+    def all_keys(self):
+        """Get a list of available keys for objects of this type.
+        Includes fixed and computed fields.
+        """
+        return list(self._fields) + self._getters().keys()
+
     # Act like a dictionary.
 
     def update(self, values):
@@ -458,6 +466,11 @@ class Model(object):
             raise TypeError("_parse() argument must be a string")
 
         return cls._type(key).parse(string)
+
+    def set_parse(self, key, string):
+        """Set the object's key to a value represented by a string.
+        """
+        self[key] = self._parse(key, string)
 
 
 # Database controller and supporting interfaces.

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Jakob Schnitzer.
 #
@@ -26,8 +27,8 @@ from string import Template
 
 from beets import ui, util, plugins, config
 from beets.plugins import BeetsPlugin
-from beetsplug.embedart import EmbedCoverArtPlugin
 from beets.util.confit import ConfigTypeError
+from beets import art
 
 _fs_lock = threading.Lock()
 _temp_files = []  # Keep track of temporary transcoded files for deletion.
@@ -125,6 +126,7 @@ class ConvertPlugin(BeetsPlugin):
             },
             u'max_bitrate': 500,
             u'auto': False,
+            u'tmpdir': None,
             u'quiet': False,
             u'embed': True,
             u'paths': {},
@@ -146,9 +148,9 @@ class ConvertPlugin(BeetsPlugin):
                               dest='keep_new', help='keep only the converted \
                               and move the old files')
         cmd.parser.add_option('-d', '--dest', action='store',
-                              help='set the target format of the tracks')
-        cmd.parser.add_option('-f', '--format', action='store', dest='format',
                               help='set the destination directory')
+        cmd.parser.add_option('-f', '--format', action='store', dest='format',
+                              help='set the target format of the tracks')
         cmd.parser.add_option('-y', '--yes', action='store_true', dest='yes',
                               help='do not ask for confirmation')
         cmd.parser.add_album_option()
@@ -168,7 +170,12 @@ class ConvertPlugin(BeetsPlugin):
         Raises `subprocess.CalledProcessError` if the command exited with a
         non-zero status code.
         """
-        quiet = self.config['quiet'].get()
+        # The paths and arguments must be bytes.
+        assert isinstance(command, bytes)
+        assert isinstance(source, bytes)
+        assert isinstance(dest, bytes)
+
+        quiet = self.config['quiet'].get(bool)
 
         if not quiet and not pretend:
             self._log.info(u'Encoding {0}', util.displayable_path(source))
@@ -177,12 +184,12 @@ class ConvertPlugin(BeetsPlugin):
         args = shlex.split(command)
         for i, arg in enumerate(args):
             args[i] = Template(arg).safe_substitute({
-                'source': source.decode('utf8'),
-                'dest': dest.decode('utf8'),
+                b'source': source,
+                b'dest': dest,
             })
 
         if pretend:
-            self._log.info(' '.join(args))
+            self._log.info(' '.join(ui.decargs(args)))
             return
 
         try:
@@ -285,8 +292,10 @@ class ConvertPlugin(BeetsPlugin):
             if self.config['embed']:
                 album = item.get_album()
                 if album and album.artpath:
-                    EmbedCoverArtPlugin().embed_item(item, album.artpath,
-                                                     itempath=converted)
+                    self._log.debug('embedding album art from {}',
+                                    util.displayable_path(album.artpath))
+                    art.embed_item(self._log, item, album.artpath,
+                                   itempath=converted)
 
             if keep_new:
                 plugins.send('after_convert', item=item,
@@ -388,13 +397,22 @@ class ConvertPlugin(BeetsPlugin):
         fmt = self.config['format'].get(unicode).lower()
         if should_transcode(item, fmt):
             command, ext = get_format()
-            fd, dest = tempfile.mkstemp('.' + ext)
+
+            # Create a temporary file for the conversion.
+            tmpdir = self.config['tmpdir'].get()
+            fd, dest = tempfile.mkstemp('.' + ext, dir=tmpdir)
             os.close(fd)
+            dest = util.bytestring_path(dest)
             _temp_files.append(dest)  # Delete the transcode later.
+
+            # Convert.
             try:
                 self.encode(command, item.path, dest)
             except subprocess.CalledProcessError:
                 return
+
+            # Change the newly-imported database entry to point to the
+            # converted file.
             item.path = dest
             item.write()
             item.read()  # Load new audio information data.

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -21,6 +22,7 @@ import os
 import shutil
 
 import responses
+from mock import patch
 
 from test import _common
 from test._common import unittest
@@ -30,6 +32,8 @@ from beets import library
 from beets import importer
 from beets import config
 from beets import logging
+from beets import util
+from beets.util.artresizer import ArtResizer, WEBPROXY
 
 
 logger = logging.getLogger('beets.test_art')
@@ -109,7 +113,7 @@ class CombinedTest(UseThePlugin):
                  .format(ASIN)
     AAO_URL = 'http://www.albumart.org/index_detail.php?asin={0}' \
               .format(ASIN)
-    CAA_URL = 'http://coverartarchive.org/release/{0}/front-500.jpg' \
+    CAA_URL = 'http://coverartarchive.org/release/{0}/front' \
               .format(MBID)
 
     def setUp(self):
@@ -203,7 +207,7 @@ class AAOTest(_common.TestCase):
                       match_querystring=True)
 
     def test_aao_scraper_finds_image(self):
-        body = """
+        body = b"""
         <br />
         <a href="TARGET_URL" title="View larger image"
            class="thickbox" style="color: #7E9DA2; text-decoration:none;">
@@ -216,42 +220,10 @@ class AAOTest(_common.TestCase):
         self.assertEqual(list(res)[0], 'TARGET_URL')
 
     def test_aao_scraper_returns_no_result_when_no_image_present(self):
-        self.mock_response(self.AAO_URL, 'blah blah')
+        self.mock_response(self.AAO_URL, b'blah blah')
         album = _common.Bag(asin=self.ASIN)
         res = self.source.get(album)
         self.assertEqual(list(res), [])
-
-
-class GoogleImageTest(_common.TestCase):
-
-    _google_url = 'https://ajax.googleapis.com/ajax/services/search/images'
-
-    def setUp(self):
-        super(GoogleImageTest, self).setUp()
-        self.source = fetchart.GoogleImages(logger)
-
-    @responses.activate
-    def run(self, *args, **kwargs):
-        super(GoogleImageTest, self).run(*args, **kwargs)
-
-    def mock_response(self, url, json):
-        responses.add(responses.GET, url, body=json,
-                      content_type='application/json')
-
-    def test_google_art_finds_image(self):
-        album = _common.Bag(albumartist="some artist", album="some album")
-        json = """{"responseData": {"results":
-            [{"unescapedUrl": "url_to_the_image"}]}}"""
-        self.mock_response(self._google_url, json)
-        result_url = self.source.get(album)
-        self.assertEqual(list(result_url)[0], 'url_to_the_image')
-
-    def test_google_art_dont_finds_image(self):
-        album = _common.Bag(albumartist="some artist", album="some album")
-        json = """bla blup"""
-        self.mock_response(self._google_url, json)
-        result_url = self.source.get(album)
-        self.assertEqual(list(result_url), [])
 
 
 class ArtImporterTest(UseThePlugin):
@@ -355,6 +327,105 @@ class ArtImporterTest(UseThePlugin):
         shutil.copyfile(self.art_file, artdest)
         self.afa_response = artdest
         self._fetch_art(True)
+
+    def test_fetch_art_if_imported_file_deleted(self):
+        # See #1126. Test the following scenario:
+        #   - Album art imported, `album.artpath` set.
+        #   - Imported album art file subsequently deleted (by user or other
+        #     program).
+        # `fetchart` should import album art again instead of printing the
+        # message "<album> has album art".
+        self._fetch_art(True)
+        util.remove(self.album.artpath)
+        self.plugin.batch_fetch_art(self.lib, self.lib.albums(), force=False)
+        self.assertExists(self.album.artpath)
+
+
+class ArtForAlbumTest(UseThePlugin):
+    """ Tests that fetchart.art_for_album respects the size
+    configuration (e.g., minwidth, enforce_ratio)
+    """
+
+    IMG_225x225 = os.path.join(_common.RSRC, 'abbey.jpg')
+    IMG_348x348 = os.path.join(_common.RSRC, 'abbey-different.jpg')
+    IMG_500x490 = os.path.join(_common.RSRC, 'abbey-similar.jpg')
+
+    def setUp(self):
+        super(ArtForAlbumTest, self).setUp()
+
+        self.old_fs_source_get = self.plugin.fs_source.get
+        self.old_fetch_img = self.plugin._fetch_image
+        self.old_source_urls = self.plugin._source_urls
+
+        def fs_source_get(*_):
+            return self.image_file
+
+        def source_urls(_):
+            return ['']
+
+        def fetch_img(_):
+            return self.image_file
+
+        self.plugin.fs_source.get = fs_source_get
+        self.plugin._source_urls = source_urls
+        self.plugin._fetch_image = fetch_img
+
+    def tearDown(self):
+        self.plugin.fs_source.get = self.old_fs_source_get
+        self.plugin._source_urls = self.old_source_urls
+        self.plugin._fetch_image = self.old_fetch_img
+        super(ArtForAlbumTest, self).tearDown()
+
+    def _assertImageIsValidArt(self, image_file, should_exist):
+        self.assertExists(image_file)
+        self.image_file = image_file
+
+        local_artpath = self.plugin.art_for_album(None, [''], True)
+        remote_artpath = self.plugin.art_for_album(None, [], False)
+
+        self.assertEqual(local_artpath, remote_artpath)
+
+        if should_exist:
+            self.assertEqual(local_artpath, self.image_file)
+            self.assertExists(local_artpath)
+            return local_artpath
+        else:
+            self.assertIsNone(local_artpath)
+
+    def _assertImageResized(self, image_file, should_resize):
+        self.image_file = image_file
+        with patch.object(ArtResizer.shared, 'resize') as mock_resize:
+            self.plugin.art_for_album(None, [''], True)
+            self.assertEqual(mock_resize.called, should_resize)
+
+    def _require_backend(self):
+        """Skip the test if the art resizer doesn't have ImageMagick or
+        PIL (so comparisons and measurements are unavailable).
+        """
+        if ArtResizer.shared.method[0] == WEBPROXY:
+            self.skipTest("ArtResizer has no local imaging backend available")
+
+    def test_respect_minwidth(self):
+        self._require_backend()
+        self.plugin.minwidth = 300
+        self._assertImageIsValidArt(self.IMG_225x225, False)
+        self._assertImageIsValidArt(self.IMG_348x348, True)
+
+    def test_respect_enforce_ratio_yes(self):
+        self._require_backend()
+        self.plugin.enforce_ratio = True
+        self._assertImageIsValidArt(self.IMG_500x490, False)
+        self._assertImageIsValidArt(self.IMG_225x225, True)
+
+    def test_respect_enforce_ratio_no(self):
+        self.plugin.enforce_ratio = False
+        self._assertImageIsValidArt(self.IMG_500x490, True)
+
+    def test_resize_if_necessary(self):
+        self._require_backend()
+        self.plugin.maxwidth = 300
+        self._assertImageResized(self.IMG_225x225, False)
+        self._assertImageResized(self.IMG_348x348, True)
 
 
 def suite():

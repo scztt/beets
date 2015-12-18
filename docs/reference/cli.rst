@@ -245,7 +245,7 @@ move
 ````
 ::
 
-    beet move [-ca] [-d DIR] QUERY
+    beet move [-cap] [-d DIR] QUERY
 
 Move or copy items in your library.
 
@@ -254,6 +254,10 @@ query are renamed into your library directory structure. By specifying a
 destination directory with ``-d`` manually, you can move items matching a query
 anywhere in your filesystem. The ``-c`` option copies files instead of moving
 them. As with other commands, the ``-a`` option matches albums instead of items.
+
+To perform a "dry run", just use the ``-p`` (for "pretend") flag. This will
+show you all how the files would be moved but won't actually change anything
+on disk.
 
 .. _update-cmd:
 
@@ -268,7 +272,10 @@ changes and file deletions.
 
 This will scan all the matched files and read their tags, populating the
 database with the new values. By default, files will be renamed according to
-their new metadata; disable this with ``-M``.
+their new metadata; disable this with ``-M``. Beets will skip files if their
+modification times have not changed, so any out-of-band metadata changes must
+also update these for ``beet update`` to recognise that the files have been
+edited.
 
 To perform a "dry run" of an update, just use the ``-p`` (for "pretend") flag.
 This will show you all the proposed changes but won't actually change anything
@@ -340,7 +347,7 @@ config
 ``````
 ::
 
-    beet config [-pd]
+    beet config [-pdc]
     beet config -e
 
 Show or edit the user configuration. This command does one of three things:
@@ -351,6 +358,8 @@ Show or edit the user configuration. This command does one of three things:
 * The ``--path`` option instead shows the path to your configuration file.
   This can be combined with the ``--default`` flag to show where beets keeps
   its internal defaults.
+* By default, sensitive information like passwords is removed when dumping the
+  configuration. The ``--clear`` option includes this sensitive data.
 * With the ``--edit`` option, beets attempts to open your config file for
   editing. It first tries the ``$EDITOR`` environment variable and then a
   fallback option depending on your platform: ``open`` on OS X, ``xdg-open``
@@ -415,7 +424,20 @@ Completion of plugin commands only works for those plugins
 that were enabled when running ``beet completion``. If you add a plugin
 later on you will want to re-generate the script.
 
-If you use zsh, take a look instead at the included `completion script`_.
+zsh
+```
+
+If you use zsh, take a look at the included `completion script`_.
+
+Another approach is to use zsh's bash completion compatibility. This snippet
+defines some bash-specific functions to make this work without errors::
+
+    autoload bashcompinit
+    bashcompinit
+    _get_comp_words_by_ref() { :; }
+    compopt() { :; }
+    _filedir() { :; }
+    eval "$(beet completion)"
 
 .. _completion script: https://github.com/sampsyo/beets/blob/master/extra/_beet
 

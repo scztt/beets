@@ -36,19 +36,28 @@ file. The available options are:
   Default: ``no``.
 - **cover_names**: Prioritize images containing words in this list.
   Default: ``cover front art album folder``.
-- **google_search**: Gather images from Google Image Search.
-  Default: ``no``.
+- **minwidth**: Only images with a width bigger or equal to ``minwidth`` are
+  considered as valid album art candidates. Default: 0.
 - **maxwidth**: A maximum image width to downscale fetched images if they are
   too big. The resize operation reduces image width to at most ``maxwidth``
   pixels. The height is recomputed so that the aspect ratio is preserved.
+- **enforce_ratio**: Only images with a width:height ratio of 1:1 are
+  considered as valid album art candidates. Default: ``no``.
 - **remote_priority**: Query remote sources every time and use local image only
   as fallback.
   Default: ``no``; remote (Web) art sources are only queried if no local art is
   found in the filesystem.
 - **sources**: List of sources to search for images. An asterisk `*` expands
   to all available sources.
-  Default: ``coverart itunes albumart amazon google wikipedia``, i.e.,
-  all sources.
+  Default: ``coverart itunes amazon albumart``, i.e., everything but
+  ``wikipedia``. Enable those two sources for more matches at
+  the cost of some speed.
+
+Note: ``minwidth`` and ``enforce_ratio`` options require either `ImageMagick`_
+or `Pillow`_.
+
+.. _Pillow: https://github.com/python-pillow/Pillow
+.. _ImageMagick: http://www.imagemagick.org/
 
 Here's an example that makes plugin select only images that contain *front* or
 *back* keywords in their filenames and prioritizes the iTunes source over
@@ -78,27 +87,28 @@ be processed; otherwise, the command processes every album in your library.
 Image Resizing
 --------------
 
-Beets can resize images using `PIL`_, `ImageMagick`_, or a server-side resizing
-proxy. If either PIL or ImageMagick is installed, beets will use those;
+Beets can resize images using `Pillow`_, `ImageMagick`_, or a server-side resizing
+proxy. If either Pillow or ImageMagick is installed, beets will use those;
 otherwise, it falls back to the resizing proxy. If the resizing proxy is used,
 no resizing is performed for album art found on the filesystem---only downloaded
 art is resized. Server-side resizing can also be slower than local resizing, so
 consider installing one of the two backends for better performance.
 
-When using ImageMagic, beets looks for the ``convert`` executable in your path.
+When using ImageMagick, beets looks for the ``convert`` executable in your path.
 On some versions of Windows, the program can be shadowed by a system-provided
 ``convert.exe``. On these systems, you may need to modify your ``%PATH%``
-environment variable so that ImageMagick comes first or use PIL instead.
+environment variable so that ImageMagick comes first or use Pillow instead.
 
-.. _PIL: http://www.pythonware.com/products/pil/
+.. _Pillow: https://github.com/python-pillow/Pillow
 .. _ImageMagick: http://www.imagemagick.org/
 
 Album Art Sources
 -----------------
 
 By default, this plugin searches for art in the local filesystem as well as on
-the Cover Art Archive, the iTunes Store, Amazon, AlbumArt.org,
-and Google Image Search, and Wikipedia, in that order. You can reorder the sources or remove
+the Cover Art Archive, the iTunes Store, Amazon, and AlbumArt.org, in that
+order.
+You can reorder the sources or remove
 some to speed up the process using the ``sources`` configuration option.
 
 When looking for local album art, beets checks for image files located in the
@@ -117,22 +127,15 @@ iTunes Store
 To use the iTunes Store as an art source, install the `python-itunes`_
 library. You can do this using `pip`_, like so::
 
-    $ pip install python-itunes
+    $ pip install https://github.com/ocelma/python-itunes/archive/master.zip
 
+(There's currently `a problem`_ that prevents a plain ``pip install
+python-itunes`` from working.)
 Once the library is installed, the plugin will use it to search automatically.
 
+.. _a problem: https://github.com/ocelma/python-itunes/issues/9
 .. _python-itunes: https://github.com/ocelma/python-itunes
 .. _pip: http://pip.openplans.org/
-
-Google Image Search
-'''''''''''''''''''
-
-You can optionally search for cover art on `Google Images`_. This option uses
-the first hit for a search query consisting of the artist and album name. It
-is therefore approximate: "incorrect" image matches are possible (although
-unlikely).
-
-.. _Google Images: http://images.google.com/
 
 
 Embedding Album Art

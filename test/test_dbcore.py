@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -351,7 +352,7 @@ class QueryParseTest(unittest.TestCase):
             part,
             {'year': dbcore.query.NumericQuery},
             {':': dbcore.query.RegexpQuery},
-        )
+        )[:-1]  # remove the negate flag
 
     def test_one_basic_term(self):
         q = 'test'
@@ -449,6 +450,7 @@ class SortFromStringsTest(unittest.TestCase):
     def test_zero_parts(self):
         s = self.sfs([])
         self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(s, dbcore.query.NullSort())
 
     def test_one_parts(self):
         s = self.sfs(['field+'])
@@ -461,17 +463,67 @@ class SortFromStringsTest(unittest.TestCase):
 
     def test_fixed_field_sort(self):
         s = self.sfs(['field_one+'])
-        self.assertIsInstance(s, dbcore.query.MultipleSort)
-        self.assertIsInstance(s.sorts[0], dbcore.query.FixedFieldSort)
+        self.assertIsInstance(s, dbcore.query.FixedFieldSort)
+        self.assertEqual(s, dbcore.query.FixedFieldSort('field_one'))
 
     def test_flex_field_sort(self):
         s = self.sfs(['flex_field+'])
-        self.assertIsInstance(s, dbcore.query.MultipleSort)
-        self.assertIsInstance(s.sorts[0], dbcore.query.SlowFieldSort)
+        self.assertIsInstance(s, dbcore.query.SlowFieldSort)
+        self.assertEqual(s, dbcore.query.SlowFieldSort('flex_field'))
 
     def test_special_sort(self):
         s = self.sfs(['some_sort+'])
-        self.assertIsInstance(s.sorts[0], TestSort)
+        self.assertIsInstance(s, TestSort)
+
+
+class ParseSortedQueryTest(unittest.TestCase):
+    def psq(self, parts):
+        return dbcore.parse_sorted_query(
+            TestModel1,
+            parts.split(),
+        )
+
+    def test_and_query(self):
+        q, s = self.psq('foo bar')
+        self.assertIsInstance(q, dbcore.query.AndQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 2)
+
+    def test_or_query(self):
+        q, s = self.psq('foo , bar')
+        self.assertIsInstance(q, dbcore.query.OrQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 2)
+
+    def test_no_space_before_comma_or_query(self):
+        q, s = self.psq('foo, bar')
+        self.assertIsInstance(q, dbcore.query.OrQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 2)
+
+    def test_no_spaces_or_query(self):
+        q, s = self.psq('foo,bar')
+        self.assertIsInstance(q, dbcore.query.AndQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 1)
+
+    def test_trailing_comma_or_query(self):
+        q, s = self.psq('foo , bar ,')
+        self.assertIsInstance(q, dbcore.query.OrQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 3)
+
+    def test_leading_comma_or_query(self):
+        q, s = self.psq(', foo , bar')
+        self.assertIsInstance(q, dbcore.query.OrQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 3)
+
+    def test_only_direction(self):
+        q, s = self.psq('-')
+        self.assertIsInstance(q, dbcore.query.AndQuery)
+        self.assertIsInstance(s, dbcore.query.NullSort)
+        self.assertEqual(len(q.subqueries), 1)
 
 
 class ResultsIteratorTest(unittest.TestCase):

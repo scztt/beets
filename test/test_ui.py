@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -22,7 +23,9 @@ import shutil
 import re
 import subprocess
 import platform
+from copy import deepcopy
 
+from mock import patch
 from test import _common
 from test._common import unittest
 from test.helper import capture_stdout, has_program, TestHelper, control_stdin
@@ -371,8 +374,9 @@ class MoveTest(_common.TestCase):
         # Alternate destination directory.
         self.otherdir = os.path.join(self.temp_dir, 'testotherdir')
 
-    def _move(self, query=(), dest=None, copy=False, album=False):
-        commands.move_items(self.lib, dest, query, copy, album)
+    def _move(self, query=(), dest=None, copy=False, album=False,
+              pretend=False):
+        commands.move_items(self.lib, dest, query, copy, album, pretend)
 
     def test_move_item(self):
         self._move()
@@ -415,6 +419,16 @@ class MoveTest(_common.TestCase):
         self.assertTrue('testotherdir' in self.i.path)
         self.assertExists(self.i.path)
         self.assertNotExists(self.itempath)
+
+    def test_pretend_move_item(self):
+        self._move(dest=self.otherdir, pretend=True)
+        self.i.load()
+        self.assertIn('srcfile', self.i.path)
+
+    def test_pretend_move_album(self):
+        self._move(album=True, pretend=True)
+        self.i.load()
+        self.assertIn('srcfile', self.i.path)
 
 
 class UpdateTest(_common.TestCase):
@@ -970,6 +984,43 @@ class ShowChangeTest(_common.TestCase):
         msg = re.sub(r'  +', ' ', self._show_change())
         self.assertTrue(u'caf\xe9.mp3 -> the title' in msg or
                         u'caf.mp3 ->' in msg)
+
+
+class SummarizeItemsTest(_common.TestCase):
+    def setUp(self):
+        super(SummarizeItemsTest, self).setUp()
+        item = library.Item()
+        item.bitrate = 4321
+        item.length = 10 * 60 + 54
+        item.format = "F"
+        self.item = item
+        fsize_mock = patch('beets.library.Item.try_filesize').start()
+        fsize_mock.return_value = 987
+
+    def test_summarize_item(self):
+        summary = commands.summarize_items([], True)
+        self.assertEqual(summary, "")
+
+        summary = commands.summarize_items([self.item], True)
+        self.assertEqual(summary, "F, 4kbps, 10:54, 987.0 B")
+
+    def test_summarize_items(self):
+        summary = commands.summarize_items([], False)
+        self.assertEqual(summary, "0 items")
+
+        summary = commands.summarize_items([self.item], False)
+        self.assertEqual(summary, "1 items, F, 4kbps, 10:54, 987.0 B")
+
+        i2 = deepcopy(self.item)
+        summary = commands.summarize_items([self.item, i2], False)
+        self.assertEqual(summary, "2 items, F, 4kbps, 21:48, 1.9 KiB")
+
+        i2.format = "G"
+        summary = commands.summarize_items([self.item, i2], False)
+        self.assertEqual(summary, "2 items, F 1, G 1, 4kbps, 21:48, 1.9 KiB")
+
+        summary = commands.summarize_items([self.item, i2, i2], False)
+        self.assertEqual(summary, "3 items, G 2, F 1, 4kbps, 32:42, 2.9 KiB")
 
 
 class PathFormatTest(_common.TestCase):

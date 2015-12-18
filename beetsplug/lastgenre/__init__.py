@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -26,11 +27,12 @@ https://gist.github.com/1241307
 import pylast
 import os
 import yaml
+import traceback
 
 from beets import plugins
 from beets import ui
-from beets.util import normpath, plurality
 from beets import config
+from beets.util import normpath, plurality
 from beets import library
 
 
@@ -291,7 +293,7 @@ class LastGenrePlugin(plugins.BeetsPlugin):
             result = None
             if isinstance(obj, library.Item):
                 result = self.fetch_artist_genre(obj)
-            elif obj.albumartist != 'Various Artists':
+            elif obj.albumartist != config['va_name'].get(unicode):
                 result = self.fetch_album_artist_genre(obj)
             else:
                 # For "Various Artists", pick the most popular track genre.
@@ -335,7 +337,7 @@ class LastGenrePlugin(plugins.BeetsPlugin):
         )
 
         def lastgenre_func(lib, opts, args):
-            write = config['import']['write'].get(bool)
+            write = ui.should_write()
             self.config.set_args(opts)
 
             for album in lib.albums(ui.decargs(args)):
@@ -391,21 +393,26 @@ class LastGenrePlugin(plugins.BeetsPlugin):
 
         If `min_weight` is specified, tags are filtered by weight.
         """
+        # Work around an inconsistency in pylast where
+        # Album.get_top_tags() does not return TopItem instances.
+        # https://code.google.com/p/pylast/issues/detail?id=85
+        if isinstance(obj, pylast.Album):
+            obj = super(pylast.Album, obj)
+
         try:
-            # Work around an inconsistency in pylast where
-            # Album.get_top_tags() does not return TopItem instances.
-            # https://code.google.com/p/pylast/issues/detail?id=85
-            if isinstance(obj, pylast.Album):
-                res = super(pylast.Album, obj).get_top_tags()
-            else:
-                res = obj.get_top_tags()
+            res = obj.get_top_tags()
         except PYLAST_EXCEPTIONS as exc:
             self._log.debug(u'last.fm error: {0}', exc)
+            return []
+        except Exception as exc:
+            # Isolate bugs in pylast.
+            self._log.debug('{}', traceback.format_exc())
+            self._log.error('error in pylast library: {0}', exc)
             return []
 
         # Filter by weight (optionally).
         if min_weight:
-            res = [el for el in res if (el.weight or 0) >= min_weight]
+            res = [el for el in res if (int(el.weight or 0)) >= min_weight]
 
         # Get strings from tags.
         res = [el.item.get_name().lower() for el in res]

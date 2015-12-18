@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Thomas Scholtes.
 #
@@ -23,6 +24,7 @@ from test import helper
 from test.helper import control_stdin
 
 from beets.mediafile import MediaFile
+from beets import util
 
 
 class TestHelper(helper.TestHelper):
@@ -105,7 +107,9 @@ class ConvertCliTest(unittest.TestCase, TestHelper):
         self.item = self.album.items()[0]
         self.load_plugins('convert')
 
-        self.convert_dest = os.path.join(self.temp_dir, 'convert_dest')
+        self.convert_dest = util.bytestring_path(
+            os.path.join(self.temp_dir, 'convert_dest')
+        )
         self.config['convert'] = {
             'dest': self.convert_dest,
             'paths': {'default': 'converted'},
@@ -175,6 +179,11 @@ class ConvertCliTest(unittest.TestCase, TestHelper):
         self.run_command('convert', '--yes', self.item.path)
         with open(converted, 'r') as f:
             self.assertEqual(f.read(), 'XXX')
+
+    def test_pretend(self):
+        self.run_command('convert', '--pretend', self.item.path)
+        converted = os.path.join(self.convert_dest, 'converted.mp3')
+        self.assertFalse(os.path.exists(converted))
 
 
 class NeverConvertLossyFilesTest(unittest.TestCase, TestHelper):

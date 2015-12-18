@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -730,7 +731,7 @@ class ApplyTest(_common.TestCase, ApplyTestUtil):
         my_info = copy.deepcopy(self.info)
         self._apply(info=my_info)
         self.assertEqual(self.items[0].artist, 'artistNew')
-        self.assertEqual(self.items[0].artist, 'artistNew')
+        self.assertEqual(self.items[1].artist, 'artistNew')
 
     def test_album_artist_overriden_by_nonempty_track_artist(self):
         my_info = copy.deepcopy(self.info)

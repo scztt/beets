@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Thomas Scholtes.
 #
@@ -17,7 +18,8 @@ from __future__ import (division, absolute_import, print_function,
 
 import os.path
 import shutil
-from mock import Mock, patch
+from mock import patch
+import tempfile
 
 from test import _common
 from test._common import unittest
@@ -27,7 +29,7 @@ from beets.mediafile import MediaFile
 from beets import config, logging, ui
 from beets.util import syspath
 from beets.util.artresizer import ArtResizer
-from beetsplug.embedart import EmbedCoverArtPlugin
+from beets import art
 
 
 def require_artresizer_compare(test):
@@ -81,11 +83,47 @@ class EmbedartCliTest(_common.TestCase, TestHelper):
         mediafile = MediaFile(syspath(item.path))
         self.assertEqual(mediafile.images[0].data, self.image_data)
 
+    def test_embed_art_remove_art_file(self):
+        self._setup_data()
+        album = self.add_album_fixture()
+
+        logging.getLogger('beets.embedart').setLevel(logging.DEBUG)
+
+        handle, tmp_path = tempfile.mkstemp()
+        os.write(handle, self.image_data)
+        os.close(handle)
+
+        album.artpath = tmp_path
+        album.store()
+
+        config['embedart']['remove_art_file'] = True
+        self.run_command('embedart')
+
+        if os.path.isfile(tmp_path):
+            os.remove(tmp_path)
+            self.fail('Artwork file {0} was not deleted'.format(tmp_path))
+
     def test_art_file_missing(self):
         self.add_album_fixture()
         logging.getLogger('beets.embedart').setLevel(logging.DEBUG)
         with self.assertRaises(ui.UserError):
             self.run_command('embedart', '-f', '/doesnotexist')
+
+    def test_embed_non_image_file(self):
+        album = self.add_album_fixture()
+        logging.getLogger('beets.embedart').setLevel(logging.DEBUG)
+
+        handle, tmp_path = tempfile.mkstemp()
+        os.write(handle, 'I am not an image.')
+        os.close(handle)
+
+        try:
+            self.run_command('embedart', '-f', tmp_path)
+        finally:
+            os.remove(tmp_path)
+
+        mediafile = MediaFile(syspath(album.items()[0].path))
+        self.assertFalse(mediafile.images)  # No image added.
 
     @require_artresizer_compare
     def test_reject_different_art(self):
@@ -116,48 +154,48 @@ class EmbedartCliTest(_common.TestCase, TestHelper):
                          self.abbey_similarpath))
 
     def test_non_ascii_album_path(self):
-        resource_path = os.path.join(_common.RSRC, 'image.mp3')
+        resource_path = os.path.join(_common.RSRC, 'image.mp3').encode('utf8')
         album = self.add_album_fixture()
         trackpath = album.items()[0].path
         albumpath = album.path
-        shutil.copy(resource_path, trackpath.decode('utf-8'))
+        shutil.copy(syspath(resource_path), syspath(trackpath))
 
         self.run_command('extractart', '-n', 'extracted')
 
-        self.assertExists(os.path.join(albumpath.decode('utf-8'),
-                                       'extracted.png'))
+        self.assertExists(syspath(os.path.join(albumpath, b'extracted.png')))
 
 
-class EmbedartTest(unittest.TestCase):
-    @patch('beetsplug.embedart.subprocess')
-    def test_imagemagick_response(self, mock_subprocess):
-        embed = EmbedCoverArtPlugin()
-        embed.extract = Mock(return_value=True)
+@patch('beets.art.subprocess')
+@patch('beets.art.extract')
+class ArtSimilarityTest(unittest.TestCase):
+    def test_imagemagick_response(self, mock_extract, mock_subprocess):
+        mock_extract.return_value = True
         proc = mock_subprocess.Popen.return_value
+        log = logging.getLogger('beets.embedart')
 
         # everything is fine
         proc.returncode = 0
         proc.communicate.return_value = "10", "tagada"
-        self.assertTrue(embed.check_art_similarity(None, None, 20))
-        self.assertFalse(embed.check_art_similarity(None, None, 5))
+        self.assertTrue(art.check_art_similarity(log, None, None, 20))
+        self.assertFalse(art.check_art_similarity(log, None, None, 5))
 
         # small failure
         proc.returncode = 1
         proc.communicate.return_value = "tagada", "10"
-        self.assertTrue(embed.check_art_similarity(None, None, 20))
-        self.assertFalse(embed.check_art_similarity(None, None, 5))
+        self.assertTrue(art.check_art_similarity(log, None, None, 20))
+        self.assertFalse(art.check_art_similarity(log, None, None, 5))
 
         # bigger failure
         proc.returncode = 2
-        self.assertIsNone(embed.check_art_similarity(None, None, 20))
+        self.assertIsNone(art.check_art_similarity(log, None, None, 20))
 
         # IM result parsing problems
         proc.returncode = 0
         proc.communicate.return_value = "foo", "bar"
-        self.assertIsNone(embed.check_art_similarity(None, None, 20))
+        self.assertIsNone(art.check_art_similarity(log, None, None, 20))
 
         proc.returncode = 1
-        self.assertIsNone(embed.check_art_similarity(None, None, 20))
+        self.assertIsNone(art.check_art_similarity(log, None, None, 20))
 
 
 def suite():

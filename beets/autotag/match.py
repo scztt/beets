@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -357,7 +358,7 @@ def _add_candidate(items, results, info):
     dist = distance(items, info, mapping)
 
     # Skip matches with ignored penalties.
-    penalties = [key for _, key in dist]
+    penalties = [key for key, _ in dist]
     for penalty in config['match']['ignored'].as_str_seq():
         if penalty in penalties:
             log.debug(u'Ignored. Penalty: {0}', penalty)
@@ -382,7 +383,7 @@ def tag_album(items, search_artist=None, search_album=None,
     search. This can be customized by setting the parameters. The
     `mapping` field of the album has the matched `items` as keys.
 
-    The recommendation is calculated from the match qualitiy of the
+    The recommendation is calculated from the match quality of the
     candidates.
     """
     # Get current metadata.

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 AUTHOR = u'Adrian Sampson'
 
 # General configuration
@@ -12,7 +14,7 @@ project = u'beets'
 copyright = u'2012, Adrian Sampson'
 
 version = '1.3'
-release = '1.3.11'
+release = '1.3.16'
 
 pygments_style = 'sphinx'
 
@@ -23,7 +25,6 @@ extlinks = {
 }
 
 # Options for HTML output
-html_theme = 'default'
 htmlhelp_basename = 'beetsdoc'
 
 # Options for LaTeX output

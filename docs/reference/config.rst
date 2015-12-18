@@ -64,6 +64,12 @@ plugins
 A space-separated list of plugin module names to load. See
 :ref:`using-plugins`.
 
+include
+~~~~~~~
+
+A space-separated list of extra configuration files to include.
+Filenames are relative to the directory containing ``config.yaml``.
+
 pluginpath
 ~~~~~~~~~~
 
@@ -119,6 +125,11 @@ compatibility with Windows-influenced network filesystems like Samba).
 Trailing dots and trailing whitespace, which can cause problems on Windows
 clients, are also removed.
 
+When replacements other than the defaults are used, it is possible that they
+will increase the length of the path. In the scenario where this leads to a
+conflict with the maximum filename length, the default replacements will be
+used to resolve the conflict and beets will display a warning.
+
 Note that paths might contain special characters such as typographical
 quotes (``“”``). With the configuration above, those will not be
 replaced as they don't match the typewriter quote (``"``). To also strip these
@@ -159,7 +170,10 @@ threaded
 ~~~~~~~~
 
 Either ``yes`` or ``no``, indicating whether the autotagger should use
-multiple threads. This makes things faster but may behave strangely.
+multiple threads. This makes things substantially faster by overlapping work:
+for example, it can copy files for one album in parallel with looking up data
+in MusicBrainz for a different album. You may want to disable this when
+debugging problems with the autotagger.
 Defaults to ``yes``.
 
 
@@ -204,6 +218,15 @@ sort_album
 Default sort order to use when fetching items from the database. Defaults to
 ``albumartist+ album+``. Explicit sort orders override this default.
 
+.. _sort_case_insensitive:
+
+sort_case_insensitive
+~~~~~~~~~~~~~~~~~~~~~
+Either ``yes`` or ``no``, indicating whether the case should be ignored when
+sorting lexicographic fields. When set to ``no``, lower-case values will be
+placed after upper-case values (e.g., *Bar Qux foo*), while ``yes`` would
+result in the more expected *Bar foo Qux*. Default: ``yes``.
+
 .. _original_date:
 
 original_date
@@ -224,7 +247,7 @@ A boolean controlling the track numbering style on multi-disc releases. By
 default (``per_disc_numbering: no``), tracks are numbered per-release, so the
 first track on the second disc has track number N+1 where N is the number of
 tracks on the first disc. If this ``per_disc_numbering`` is enabled, then the
-first track on each disc always has track number 1.
+first (non-pregap) track on each disc always has track number 1.
 
 If you enable ``per_disc_numbering``, you will likely want to change your
 :ref:`path-format-config` also to include ``$disc`` before ``$track`` to make
@@ -233,6 +256,11 @@ use a path format like this::
 
     paths:
         default: $albumartist/$album%aunique{}/$disc-$track $title
+
+When this option is off (the default), even "pregap" hidden tracks are
+numbered from one, not zero, so other track numbers may appear to be bumped up
+by one. When it is on, the pregap track for each disc can be numbered zero.
+
 
 .. _terminal_encoding:
 
@@ -276,6 +304,15 @@ By default, beets writes MP3 tags using the ID3v2.4 standard, the latest
 version of ID3. Enable this option to instead use the older ID3v2.3 standard,
 which is preferred by certain older software such as Windows Media Player.
 
+.. _va_name:
+
+va_name
+~~~~~~~
+
+Sets the albumartist for various-artist compilations. Defaults to ``'Various
+Artists'`` (the MusicBrainz standard). Affects other sources, such as
+:doc:`/plugins/discogs`, too.
+
 
 UI Options
 ----------
@@ -316,8 +353,9 @@ in your configuration file that looks like this::
             action_default: turquoise
             action: blue
 
-Available colors: black, darkred, darkgreen, brown, darkblue, purple, teal,
-lightgray, darkgray, red, green, yellow, blue, fuchsia, turquoise, white
+Available colors: black, darkred, darkgreen, brown (darkyellow), darkblue,
+purple (darkmagenta), teal (darkcyan), lightgray, darkgray, red, green,
+yellow, blue, fuchsia (magenta), turquoise (cyan), white
 
 
 Importer Options
@@ -341,6 +379,8 @@ Either ``yes`` or ``no``, controlling whether metadata (e.g., ID3) tags are
 written to files when using ``beet import``. Defaults to ``yes``. The ``-w``
 and ``-W`` command-line options override this setting.
 
+.. _config-import-copy:
+
 copy
 ~~~~
 
@@ -350,6 +390,8 @@ overridden with the ``-c`` and ``-C`` command-line options.
 
 The option is ignored if ``move`` is enabled (i.e., beets can move or
 copy files but it doesn't make sense to do both).
+
+.. _config-import-move:
 
 move
 ~~~~
@@ -478,12 +520,6 @@ tracks from many albums mixed together.
 
 The ``--group-albums`` or ``-g`` option to the :ref:`import-cmd` command is
 equivalent, and the *G* interactive option invokes the same workflow.
-
-.. note::
-    
-    The :ref:`import log <import_log>` currently contains less information
-    in album-grouping mode. (Specifically, no directory names recorded because
-    directories are not used for grouping in this mode.)
 
 Default: ``no``.
 
@@ -766,7 +802,8 @@ Here's an example file::
     plugins: bpd
     pluginpath: ~/beets/myplugins
     threaded: yes
-    color: yes
+    ui:
+        color: yes
 
     paths:
         default: $genre/$albumartist/$album/$track $title

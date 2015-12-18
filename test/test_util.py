@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -19,8 +20,9 @@ from __future__ import (division, absolute_import, print_function,
 import sys
 import re
 import os
+import subprocess
 
-from mock import patch
+from mock import patch, Mock
 
 from test._common import unittest
 from test import _common
@@ -42,11 +44,11 @@ class UtilTest(unittest.TestCase):
     @patch('beets.util.open_anything')
     def test_interactive_open(self, mock_open, mock_execlp):
         mock_open.return_value = 'tagada'
-        util.interactive_open('foo')
+        util.interactive_open(['foo'], util.open_anything())
         mock_execlp.assert_called_once_with('tagada', 'tagada', 'foo')
         mock_execlp.reset_mock()
 
-        util.interactive_open('foo', 'bar')
+        util.interactive_open(['foo'], 'bar')
         mock_execlp.assert_called_once_with('bar', 'bar', 'foo')
 
     def test_sanitize_unix_replaces_leading_dot(self):
@@ -101,6 +103,19 @@ class UtilTest(unittest.TestCase):
                 (re.compile(r'^$'), u'_'),
             ])
         self.assertEqual(p, u'foo/_/bar')
+
+    @patch('beets.util.subprocess.Popen')
+    def test_command_output(self, mock_popen):
+        def popen_fail(*args, **kwargs):
+            m = Mock(returncode=1)
+            m.communicate.return_value = 'foo', 'bar'
+            return m
+
+        mock_popen.side_effect = popen_fail
+        with self.assertRaises(subprocess.CalledProcessError) as exc_context:
+            util.command_output([b"taga", b"\xc3\xa9"])
+        self.assertEqual(exc_context.exception.returncode, 1)
+        self.assertEqual(exc_context.exception.cmd, b"taga \xc3\xa9")
 
 
 class PathConversionTest(_common.TestCase):

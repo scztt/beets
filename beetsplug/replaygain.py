@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Fabrice Laporte, Yevgeny Bezman, and Adrian Sampson.
 #
@@ -27,7 +28,6 @@ from beets import logging
 from beets import ui
 from beets.plugins import BeetsPlugin
 from beets.util import syspath, command_output, displayable_path
-from beets import config
 
 
 # Utilities.
@@ -93,13 +93,14 @@ class Bs1770gainBackend(Backend):
 
     def __init__(self, config, log):
         super(Bs1770gainBackend, self).__init__(config, log)
+        config.add({
+            'chunk_at': 5000,
+            'method': 'replaygain',
+        })
+        self.chunk_at = config['chunk_at'].as_number()
+        self.method = b'--' + bytes(config['method'].get(unicode))
+
         cmd = b'bs1770gain'
-
-        try:
-            self.method = b'--' + config['method'].get(str)
-        except:
-            self.method = b'--replaygain'
-
         try:
             call([cmd, self.method])
             self.command = cmd
@@ -130,7 +131,28 @@ class Bs1770gainBackend(Backend):
         supported_items = album.items()
         output = self.compute_gain(supported_items, True)
 
+        if not output:
+            raise ReplayGainError('no output from bs1770gain')
         return AlbumGain(output[-1], output[:-1])
+
+    def isplitter(self, items, chunk_at):
+        """Break an iterable into chunks of at most size `chunk_at`,
+        generating lists for each chunk.
+        """
+        iterable = iter(items)
+        while True:
+            result = []
+            for i in range(chunk_at):
+                try:
+                    a = next(iterable)
+                except StopIteration:
+                    break
+                else:
+                    result.append(a)
+            if result:
+                yield result
+            else:
+                break
 
     def compute_gain(self, items, is_album):
         """Computes the track or album gain of a list of items, returns
@@ -142,21 +164,48 @@ class Bs1770gainBackend(Backend):
         if len(items) == 0:
             return []
 
+        albumgaintot = 0.0
+        albumpeaktot = 0.0
+        returnchunks = []
+
+        # In the case of very large sets of music, we break the tracks
+        # into smaller chunks and process them one at a time. This
+        # avoids running out of memory.
+        if len(items) > self.chunk_at:
+            i = 0
+            for chunk in self.isplitter(items, self.chunk_at):
+                i += 1
+                returnchunk = self.compute_chunk_gain(chunk, is_album)
+                albumgaintot += returnchunk[-1].gain
+                albumpeaktot += returnchunk[-1].peak
+                returnchunks = returnchunks + returnchunk[0:-1]
+            returnchunks.append(Gain(albumgaintot / i, albumpeaktot / i))
+            return returnchunks
+        else:
+            return self.compute_chunk_gain(items, is_album)
+
+    def compute_chunk_gain(self, items, is_album):
         """Compute ReplayGain values and return a list of results
         dictionaries as given by `parse_tool_output`.
         """
         # Construct shell command.
         cmd = [self.command]
         cmd = cmd + [self.method]
-        cmd = cmd + ['-it']
-        cmd = cmd + [syspath(i.path) for i in items]
+        cmd = cmd + [b'-it']
 
-        self._log.debug(u'analyzing {0} files', len(items))
-        self._log.debug(u"executing {0}", " ".join(map(displayable_path, cmd)))
-        output = call(cmd)
-        self._log.debug(u'analysis finished')
+        # Workaround for Windows: the underlying tool fails on paths
+        # with the \\?\ prefix, so we don't use it here. This
+        # prevents the backend from working with long paths.
+        args = cmd + [syspath(i.path, prefix=False) for i in items]
+
+        # Invoke the command.
+        self._log.debug("executing {0}", " ".join(map(displayable_path, args)))
+        output = call(args)
+
+        self._log.debug(u'analysis finished: {0}', output)
         results = self.parse_tool_output(output,
                                          len(items) + is_album)
+        self._log.debug(u'{0} items, {1} results', len(items), len(results))
         return results
 
     def parse_tool_output(self, text, num_lines):
@@ -166,25 +215,28 @@ class Bs1770gainBackend(Backend):
         """
         out = []
         data = text.decode('utf8', errors='ignore')
-        regex = ("(\s{2,2}\[\d+\/\d+\].*?|\[ALBUM\].*?)(?=\s{2,2}\[\d+\/\d+\]"
-                 "|\s{2,2}\[ALBUM\]:|done\.$)")
-
-        results = re.findall(regex, data, re.S | re.M)
-        for ll in results[0:num_lines]:
-            parts = ll.split(b'\n')
-            if len(parts) == 0:
-                self._log.debug(u'bad tool output: {0!r}', text)
+        regex = re.compile(
+            ur'(\s{2,2}\[\d+\/\d+\].*?|\[ALBUM\].*?)'
+            '(?=\s{2,2}\[\d+\/\d+\]|\s{2,2}\[ALBUM\]'
+            ':|done\.\s)', re.DOTALL | re.UNICODE)
+        results = re.findall(regex, data)
+        for parts in results[0:num_lines]:
+            part = parts.split(b'\n')
+            if len(part) == 0:
+                self._log.debug('bad tool output: {0!r}', text)
                 raise ReplayGainError('bs1770gain failed')
 
-            d = {
-                'file': parts[0],
-                'gain': float((parts[1].split('/'))[1].split('LU')[0]),
-                'peak': float(parts[2].split('/')[1]),
-            }
+            try:
+                song = {
+                    'file': part[0],
+                    'gain': float((part[1].split('/'))[1].split('LU')[0]),
+                    'peak': float(part[2].split('/')[1]),
+                }
+            except IndexError:
+                self._log.info('bs1770gain reports (faulty file?): {}', parts)
+                continue
 
-            self._log.info('analysed {}gain={};peak={}',
-                           d['file'].rstrip(), d['gain'], d['peak'])
-            out.append(Gain(d['gain'], d['peak']))
+            out.append(Gain(song['gain'], song['peak']))
         return out
 
 
@@ -265,6 +317,7 @@ class CommandBackend(Backend):
         the album gain
         """
         if len(items) == 0:
+            self._log.debug('no supported tracks to analyze')
             return []
 
         """Compute ReplayGain values and return a list of results
@@ -290,10 +343,8 @@ class CommandBackend(Backend):
         self._log.debug(u"executing {0}", " ".join(map(displayable_path, cmd)))
         output = call(cmd)
         self._log.debug(u'analysis finished')
-        results = self.parse_tool_output(output,
-                                         len(items) + (1 if is_album else 0))
-
-        return results
+        return self.parse_tool_output(output,
+                                      len(items) + (1 if is_album else 0))
 
     def parse_tool_output(self, text, num_lines):
         """Given the tab-delimited output from an invocation of mp3gain
@@ -337,6 +388,12 @@ class GStreamerBackend(Backend):
         self._conv = self.Gst.ElementFactory.make("audioconvert", "conv")
         self._res = self.Gst.ElementFactory.make("audioresample", "res")
         self._rg = self.Gst.ElementFactory.make("rganalysis", "rg")
+
+        if self._src is None or self._decbin is None or self._conv is None \
+           or self._res is None or self._rg is None:
+            raise FatalReplayGainError(
+                "Failed to load required GStreamer plugins"
+            )
 
         # We check which files need gain ourselves, so all files given
         # to rganalsys should have their gain computed, even if it
@@ -644,6 +701,23 @@ class AudioToolsBackend(Backend):
         """
         return [self._compute_track_gain(item) for item in items]
 
+    def _title_gain(self, rg, audiofile):
+        """Get the gain result pair from PyAudioTools using the `ReplayGain`
+        instance `rg` for the given `audiofile`.
+
+        Wraps `rg.title_gain(audiofile.to_pcm())` and throws a
+        `ReplayGainError` when the library fails.
+        """
+        try:
+            # The method needs an audiotools.PCMReader instance that can
+            # be obtained from an audiofile instance.
+            return rg.title_gain(audiofile.to_pcm())
+        except ValueError as exc:
+            # `audiotools.replaygain` can raise a `ValueError` if the sample
+            # rate is incorrect.
+            self._log.debug('error in rg.title_gain() call: {}', exc)
+            raise ReplayGainError('audiotools audio data error')
+
     def _compute_track_gain(self, item):
         """Compute ReplayGain value for the requested item.
 
@@ -651,11 +725,10 @@ class AudioToolsBackend(Backend):
         """
         audiofile = self.open_audio_file(item)
         rg = self.init_replaygain(audiofile, item)
-        # Each call to title_gain on a replaygain object return peak and gain
+
+        # Each call to title_gain on a ReplayGain object returns peak and gain
         # of the track.
-        # Note that the method needs an audiotools.PCMReader instance that can
-        # be obtained from an audiofile instance.
-        rg_track_gain, rg_track_peak = rg.title_gain(audiofile.to_pcm())
+        rg_track_gain, rg_track_peak = rg._title_gain(rg, audiofile)
 
         self._log.debug(u'ReplayGain for track {0} - {1}: {2:.2f}, {3:.2f}',
                         item.artist, item.title, rg_track_gain, rg_track_peak)
@@ -678,7 +751,7 @@ class AudioToolsBackend(Backend):
         track_gains = []
         for item in album.items():
             audiofile = self.open_audio_file(item)
-            rg_track_gain, rg_track_peak = rg.title_gain(audiofile.to_pcm())
+            rg_track_gain, rg_track_peak = self._title_gain(rg, audiofile)
             track_gains.append(
                 Gain(gain=rg_track_gain, peak=rg_track_peak)
             )
@@ -712,7 +785,6 @@ class ReplayGainPlugin(BeetsPlugin):
 
     def __init__(self):
         super(ReplayGainPlugin, self).__init__()
-        self.import_stages = [self.imported]
 
         # default backend is 'command' for backward-compatibility.
         self.config.add({
@@ -723,7 +795,6 @@ class ReplayGainPlugin(BeetsPlugin):
         })
 
         self.overwrite = self.config['overwrite'].get(bool)
-        self.automatic = self.config['auto'].get(bool)
         backend_name = self.config['backend'].get(unicode)
         if backend_name not in self.backends:
             raise ui.UserError(
@@ -733,6 +804,10 @@ class ReplayGainPlugin(BeetsPlugin):
                     u', '.join(self.backends.keys())
                 )
             )
+
+        # On-import analysis.
+        if self.config['auto']:
+            self.import_stages = [self.imported]
 
         try:
             self.backend_instance = self.backends[backend_name](
@@ -840,11 +915,6 @@ class ReplayGainPlugin(BeetsPlugin):
     def imported(self, session, task):
         """Add replay gain info to items or albums of ``task``.
         """
-        if not self.automatic:
-            return
-
-        self._log.setLevel(logging.WARN)
-
         if task.is_album:
             self.handle_album(task.album, False)
         else:
@@ -856,7 +926,7 @@ class ReplayGainPlugin(BeetsPlugin):
         def func(lib, opts, args):
             self._log.setLevel(logging.INFO)
 
-            write = config['import']['write'].get(bool)
+            write = ui.should_write()
 
             if opts.album:
                 for album in lib.albums(ui.decargs(args)):

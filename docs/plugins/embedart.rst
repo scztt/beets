@@ -13,7 +13,7 @@ Embedding Art Automatically
 To automatically embed discovered album art into imported files, just enable
 the ``embedart`` plugin (see :doc:`/plugins/index`). You'll also want to enable the
 :doc:`/plugins/fetchart` to obtain the images to be embedded. Art will be
-embedded after each album is added to the library.
+embedded after each album has its cover art set.
 
 This behavior can be disabled with the ``auto`` config option (see below).
 
@@ -58,11 +58,17 @@ file. The available options are:
   the aspect ratio is preserved. See also :ref:`image-resizing` for further
   caveats about image resizing.
   Default: 0 (disabled).
+- **remove_art_file**: Automatically remove the album art file for the album
+  after it has been embedded. This option is best used alongside the
+  :doc:`FetchArt </plugins/fetchart>` plugin to download art with the purpose of
+  directly embedding it into the file's metadata without an "intermediate"
+  album art file.
+  Default: ``no``.
 
 Note: ``compare_threshold`` option requires `ImageMagick`_, and ``maxwidth``
-requires either `ImageMagick`_ or `PIL`_.
+requires either `ImageMagick`_ or `Pillow`_.
 
-.. _PIL: http://www.pythonware.com/products/pil/
+.. _Pillow: https://github.com/python-pillow/Pillow
 .. _ImageMagick: http://www.imagemagick.org/
 .. _PHASH: http://www.fmwconcepts.com/misc_tests/perceptual_hash_test_results_510/
 

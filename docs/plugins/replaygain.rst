@@ -78,12 +78,11 @@ On OS X, most of the dependencies can be installed with `Homebrew`_::
 bs1770gain
 ``````````
 
-In order to use this backend, you will need to install the bs1770gain command-line tool. Here are some hints:
+To use this backend, you will need to install the `bs1770gain`_ command-line
+tool. Follow the instructions at the `bs1770gain`_ Web site and ensure that
+the tool is on your ``$PATH``.
 
-* goto `bs1770gain`_ and follow the download instructions
-* make sure it is in your $PATH 
-
-.. _bs1770gain: bs1770gain.sourceforge.net
+.. _bs1770gain: http://bs1770gain.sourceforge.net/
 
 Then, enable the plugin (see :ref:`using-plugins`) and specify the
 backend in your configuration file::
@@ -91,6 +90,9 @@ backend in your configuration file::
     replaygain:
         backend: bs1770gain
 
+For Windows users: the tool currently has issues with long and non-ASCII path
+names. You may want to use the :ref:`asciify-paths` configuration option until
+this is resolved.
 
 Configuration
 -------------
@@ -117,13 +119,15 @@ These options only work with the "command" backend:
   would keep clipping from occurring.
   Default: ``yes``.
 
-This option only works with the "bs1770gain" backend:
+These options only works with the "bs1770gain" backend:
 
 - **method**: The loudness scanning standard: either `replaygain` for
   ReplayGain 2.0, `ebu` for EBU R128, or `atsc` for ATSC A/85. This dictates
   the reference level: -18, -23, or -24 LUFS respectively. Default:
   `replaygain`
-
+- **chunk_at**: Splits an album in groups of tracks of this amount.
+  Usefull when running into memory problems when analysing albums with
+  an exceptionally large amount of tracks. Default:5000
 
 Manual Analysis
 ---------------

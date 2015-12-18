@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -24,7 +25,7 @@ import re
 
 import beets
 from beets import ui
-from beets.ui import print_, input_, decargs
+from beets.ui import print_, input_, decargs, show_path_changes
 from beets import autotag
 from beets.autotag import Recommendation
 from beets.autotag import hooks
@@ -79,31 +80,14 @@ def _do_query(lib, query, album, also_items=True):
 
 def fields_func(lib, opts, args):
     def _print_rows(names):
-        print("  " + "\n  ".join(names))
+        names.sort()
+        print_("  " + "\n  ".join(names))
 
-    def _show_plugin_fields(album):
-        plugin_fields = []
-        for plugin in plugins.find_plugins():
-            if album:
-                fdict = plugin.album_template_fields
-            else:
-                fdict = plugin.template_fields
-            plugin_fields += fdict.keys()
-        if plugin_fields:
-            print("Template fields from plugins:")
-            _print_rows(plugin_fields)
+    print_("Item fields:")
+    _print_rows(library.Item.all_keys())
 
-    print("Item fields:")
-    _print_rows(library.Item._fields.keys() +
-                library.Item._getters().keys() +
-                library.Item._types.keys())
-    _show_plugin_fields(False)
-
-    print("\nAlbum fields:")
-    _print_rows(library.Album._fields.keys() +
-                library.Album._getters().keys() +
-                library.Album._types.keys())
-    _show_plugin_fields(True)
+    print_("Album fields:")
+    _print_rows(library.Album.all_keys())
 
 
 fields_cmd = ui.Subcommand(
@@ -426,8 +410,6 @@ def summarize_items(items, singleton):
     this is an album or single-item import (if the latter, them `items`
     should only have one element).
     """
-    assert items, "summarizing zero items"
-
     summary_parts = []
     if not singleton:
         summary_parts.append("{0} items".format(len(items)))
@@ -439,16 +421,18 @@ def summarize_items(items, singleton):
         # A single format.
         summary_parts.append(items[0].format)
     else:
-        # Enumerate all the formats.
-        for fmt, count in format_counts.iteritems():
+        # Enumerate all the formats by decreasing frequencies:
+        for fmt, count in sorted(format_counts.items(),
+                                 key=lambda (f, c): (-c, f)):
             summary_parts.append('{0} {1}'.format(fmt, count))
 
-    average_bitrate = sum([item.bitrate for item in items]) / len(items)
-    total_duration = sum([item.length for item in items])
-    total_filesize = sum([item.filesize for item in items])
-    summary_parts.append('{0}kbps'.format(int(average_bitrate / 1000)))
-    summary_parts.append(ui.human_seconds_short(total_duration))
-    summary_parts.append(ui.human_bytes(total_filesize))
+    if items:
+        average_bitrate = sum([item.bitrate for item in items]) / len(items)
+        total_duration = sum([item.length for item in items])
+        total_filesize = sum([item.filesize for item in items])
+        summary_parts.append('{0}kbps'.format(int(average_bitrate / 1000)))
+        summary_parts.append(ui.human_seconds_short(total_duration))
+        summary_parts.append(ui.human_bytes(total_filesize))
 
     return ', '.join(summary_parts)
 
@@ -786,11 +770,12 @@ class TerminalImportSession(importer.ImportSession):
             # Print some detail about the existing and new items so the
             # user can make an informed decision.
             for duplicate in found_duplicates:
-                print("Old: " + summarize_items(
+                print_("Old: " + summarize_items(
                     list(duplicate.items()) if task.is_album else [duplicate],
                     not task.is_album,
                 ))
-            print("New: " + summarize_items(
+
+            print_("New: " + summarize_items(
                 task.imported_items(),
                 not task.is_album,
             ))
@@ -840,7 +825,7 @@ def import_files(lib, paths, query):
             loghandler = logging.FileHandler(logpath)
         except IOError:
             raise ui.UserError(u"could not open log file for writing: "
-                               u"{0}".format(displayable_path(loghandler)))
+                               u"{0}".format(displayable_path(logpath)))
     else:
         loghandler = None
 
@@ -974,6 +959,8 @@ def list_func(lib, opts, args):
 
 
 list_cmd = ui.Subcommand('list', help='query the library', aliases=('ls',))
+list_cmd.parser.usage += "\n" \
+    'Example: %prog -f \'$album: $title\' artist:beatles'
 list_cmd.parser.add_all_common_options()
 list_cmd.func = list_func
 default_commands.append(list_cmd)
@@ -1069,7 +1056,8 @@ def update_items(lib, query, album, move, pretend):
 
 
 def update_func(lib, opts, args):
-    update_items(lib, decargs(args), opts.album, opts.move, opts.pretend)
+    update_items(lib, decargs(args), opts.album, ui.should_move(opts.move),
+                 opts.pretend)
 
 
 update_cmd = ui.Subcommand(
@@ -1078,7 +1066,11 @@ update_cmd = ui.Subcommand(
 update_cmd.parser.add_album_option()
 update_cmd.parser.add_format_option()
 update_cmd.parser.add_option(
-    '-M', '--nomove', action='store_false', default=True, dest='move',
+    '-m', '--move', action='store_true', dest='move',
+    help="move files in the library directory"
+)
+update_cmd.parser.add_option(
+    '-M', '--nomove', action='store_false', dest='move',
     help="don't move files in library"
 )
 update_cmd.parser.add_option(
@@ -1102,11 +1094,12 @@ def remove_items(lib, query, album, delete):
     print_()
     if delete:
         fmt = u'$path - $title'
-        prompt = 'Really DELETE %i files (y/n)?' % len(items)
+        prompt = 'Really DELETE %i file%s (y/n)?' % \
+                 (len(items), 's' if len(items) > 1 else '')
     else:
         fmt = ''
-        prompt = 'Really remove %i items from the library (y/n)?' % \
-                 len(items)
+        prompt = 'Really remove %i item%s from the library (y/n)?' % \
+                 (len(items), 's' if len(items) > 1 else '')
 
     # Show all the items.
     for item in items:
@@ -1204,7 +1197,7 @@ default_commands.append(stats_cmd)
 def show_version(lib, opts, args):
     print_('beets version %s' % beets.__version__)
     # Show plugins.
-    names = [p.name for p in plugins.find_plugins()]
+    names = sorted(p.name for p in plugins.find_plugins())
     if names:
         print_('plugins:', ', '.join(names))
     else:
@@ -1311,17 +1304,19 @@ def modify_func(lib, opts, args):
     query, mods, dels = modify_parse_args(decargs(args))
     if not mods and not dels:
         raise ui.UserError('no modifications specified')
-    write = opts.write if opts.write is not None else \
-        config['import']['write'].get(bool)
-    modify_items(lib, mods, dels, query, write, opts.move, opts.album,
-                 not opts.yes)
+    modify_items(lib, mods, dels, query, ui.should_write(opts.write),
+                 ui.should_move(opts.move), opts.album, not opts.yes)
 
 
 modify_cmd = ui.Subcommand(
     'modify', help='change metadata fields', aliases=('mod',)
 )
 modify_cmd.parser.add_option(
-    '-M', '--nomove', action='store_false', default=True, dest='move',
+    '-m', '--move', action='store_true', dest='move',
+    help="move files in the library directory"
+)
+modify_cmd.parser.add_option(
+    '-M', '--nomove', action='store_false', dest='move',
     help="don't move files in library"
 )
 modify_cmd.parser.add_option(
@@ -1344,7 +1339,7 @@ default_commands.append(modify_cmd)
 
 # move: Move/copy files to the library or a new base directory.
 
-def move_items(lib, dest, query, copy, album):
+def move_items(lib, dest, query, copy, album, pretend):
     """Moves or copies items to a new base directory, given by dest. If
     dest is None, then the library's base directory is used, making the
     command "consolidate" files.
@@ -1354,12 +1349,21 @@ def move_items(lib, dest, query, copy, album):
 
     action = 'Copying' if copy else 'Moving'
     entity = 'album' if album else 'item'
-    log.info(u'{0} {1} {2}s.', action, len(objs), entity)
-    for obj in objs:
-        log.debug(u'moving: {0}', util.displayable_path(obj.path))
+    log.info(u'{0} {1} {2}{3}.', action, len(objs), entity,
+             's' if len(objs) > 1 else '')
+    if pretend:
+        if album:
+            show_path_changes([(item.path, item.destination(basedir=dest))
+                               for obj in objs for item in obj.items()])
+        else:
+            show_path_changes([(obj.path, obj.destination(basedir=dest))
+                               for obj in objs])
+    else:
+        for obj in objs:
+            log.debug(u'moving: {0}', util.displayable_path(obj.path))
 
-        obj.move(copy, basedir=dest)
-        obj.store()
+            obj.move(copy, basedir=dest)
+            obj.store()
 
 
 def move_func(lib, opts, args):
@@ -1369,7 +1373,7 @@ def move_func(lib, opts, args):
         if not os.path.isdir(dest):
             raise ui.UserError('no such directory: %s' % dest)
 
-    move_items(lib, dest, decargs(args), opts.copy, opts.album)
+    move_items(lib, dest, decargs(args), opts.copy, opts.album, opts.pretend)
 
 
 move_cmd = ui.Subcommand(
@@ -1383,6 +1387,9 @@ move_cmd.parser.add_option(
     '-c', '--copy', default=False, action='store_true',
     help='copy instead of moving'
 )
+move_cmd.parser.add_option(
+    '-p', '--pretend', default=False, action='store_true',
+    help='show how files would be moved, but don\'t touch anything')
 move_cmd.parser.add_album_option()
 move_cmd.func = move_func
 default_commands.append(move_cmd)
@@ -1456,7 +1463,7 @@ def config_func(lib, opts, args):
             filenames.insert(0, user_path)
 
         for filename in filenames:
-            print(filename)
+            print_(filename)
 
     # Open in editor.
     elif opts.edit:
@@ -1464,17 +1471,19 @@ def config_func(lib, opts, args):
 
     # Dump configuration.
     else:
-        print(config.dump(full=opts.defaults))
+        print_(config.dump(full=opts.defaults, redact=opts.redact))
 
 
 def config_edit():
     """Open a program to edit the user configuration.
+    An empty config file is created if no existing config file exists.
     """
     path = config.user_config_path()
-
-    editor = os.environ.get('EDITOR')
+    editor = util.editor_command()
     try:
-        util.interactive_open(path, editor)
+        if not os.path.isfile(path):
+            open(path, 'w+').close()
+        util.interactive_open([path], editor)
     except OSError as exc:
         message = "Could not edit configuration: {0}".format(exc)
         if not editor:
@@ -1495,6 +1504,11 @@ config_cmd.parser.add_option(
     '-d', '--defaults', action='store_true',
     help='include the default configuration'
 )
+config_cmd.parser.add_option(
+    '-c', '--clear', action='store_false',
+    dest='redact', default=True,
+    help='do not redact sensitive fields'
+)
 config_cmd.func = config_func
 default_commands.append(config_cmd)
 
@@ -1503,7 +1517,7 @@ default_commands.append(config_cmd)
 
 def print_completion(*args):
     for line in completion_script(default_commands + plugins.commands()):
-        print(line, end='')
+        print_(line, end='')
     if not any(map(os.path.isfile, BASH_COMPLETION_PATHS)):
         log.warn(u'Warning: Unable to find the bash-completion package. '
                  u'Command line completion might not work.')

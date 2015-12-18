@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -572,7 +573,7 @@ class Connection(object):
         if isinstance(lines, basestring):
             lines = [lines]
         out = NEWLINE.join(lines) + NEWLINE
-        log.debug(out[:-1])  # Don't log trailing newline.
+        log.debug('{}', out[:-1])  # Don't log trailing newline.
         if isinstance(out, unicode):
             out = out.encode('utf8')
         return self.sock.sendall(out)
@@ -603,7 +604,7 @@ class Connection(object):
             line = line.strip()
             if not line:
                 break
-            log.debug(line)
+            log.debug('{}', line)
 
             if clist is not None:
                 # Command list already opened.
@@ -639,8 +640,8 @@ class Command(object):
     """A command issued by the client for processing by the server.
     """
 
-    command_re = re.compile(r'^([^ \t]+)[ \t]*')
-    arg_re = re.compile(r'"((?:\\"|[^"])+)"|([^ \t"]+)')
+    command_re = re.compile(br'^([^ \t]+)[ \t]*')
+    arg_re = re.compile(br'"((?:\\"|[^"])+)"|([^ \t"]+)')
 
     def __init__(self, s):
         """Creates a new `Command` from the given string, `s`, parsing
@@ -655,7 +656,7 @@ class Command(object):
             if match[0]:
                 # Quoted argument.
                 arg = match[0]
-                arg = arg.replace('\\"', '"').replace('\\\\', '\\')
+                arg = arg.replace(b'\\"', b'"').replace(b'\\\\', b'\\')
             else:
                 # Unquoted argument.
                 arg = match[1]
@@ -698,7 +699,7 @@ class Command(object):
 
         except Exception as e:
             # An "unintentional" error. Hide it from the client.
-            log.error(traceback.format_exc(e))
+            log.error('{}', traceback.format_exc(e))
             raise BPDError(ERROR_SYSTEM, u'server error', self.name)
 
 
@@ -1153,6 +1154,7 @@ class BPDPlugin(BeetsPlugin):
             'password': u'',
             'volume': VOLUME_MAX,
         })
+        self.config['password'].redact = True
 
     def start_bpd(self, lib, host, port, password, volume, debug):
         """Starts a BPD server."""

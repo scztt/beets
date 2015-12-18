@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Thomas Scholtes.
 #
@@ -23,7 +24,6 @@ import subprocess
 from beets import ui
 from beets import util
 from beets.plugins import BeetsPlugin
-from beets import config
 
 
 class KeyFinderPlugin(BeetsPlugin):
@@ -46,8 +46,7 @@ class KeyFinderPlugin(BeetsPlugin):
         return [cmd]
 
     def command(self, lib, opts, args):
-        self.find_key(lib.items(ui.decargs(args)),
-                      write=config['import']['write'].get(bool))
+        self.find_key(lib.items(ui.decargs(args)), write=ui.should_write())
 
     def imported(self, session, task):
         self.find_key(task.items)
@@ -61,9 +60,16 @@ class KeyFinderPlugin(BeetsPlugin):
                 continue
 
             try:
-                output = util.command_output([bin, '-f', item.path])
+                output = util.command_output([bin, b'-f',
+                                              util.syspath(item.path)])
             except (subprocess.CalledProcessError, OSError) as exc:
-                self._log.error(u'execution failed: {0}', exc)
+                self._log.error('execution failed: {0}', exc)
+                continue
+            except UnicodeEncodeError:
+                # Workaround for Python 2 Windows bug.
+                # http://bugs.python.org/issue1759845
+                self._log.error('execution failed for Unicode path: {0!r}',
+                                item.path)
                 continue
 
             key_raw = output.rsplit(None, 1)[-1]

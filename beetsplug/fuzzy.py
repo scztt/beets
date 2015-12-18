@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Philippe Mongeau.
 #
@@ -20,6 +21,7 @@ from __future__ import (division, absolute_import, print_function,
 
 from beets.plugins import BeetsPlugin
 from beets.dbcore.query import StringFieldQuery
+from beets import config
 import difflib
 
 
@@ -30,7 +32,7 @@ class FuzzyQuery(StringFieldQuery):
         if pattern.islower():
             val = val.lower()
         queryMatcher = difflib.SequenceMatcher(None, pattern, val)
-        threshold = self.config['threshold'].as_number()
+        threshold = config['fuzzy']['threshold'].as_number()
         return queryMatcher.quick_ratio() >= threshold
 
 

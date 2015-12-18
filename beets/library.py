@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -19,12 +20,10 @@ from __future__ import (division, absolute_import, print_function,
 
 import os
 import sys
-import shlex
 import unicodedata
 import time
 import re
 from unidecode import unidecode
-import platform
 
 from beets import logging
 from beets.mediafile import MediaFile, MutagenError, UnreadableFileError
@@ -54,16 +53,19 @@ class PathQuery(dbcore.FieldQuery):
     escape_char = b'\\'
 
     def __init__(self, field, pattern, fast=True, case_sensitive=None):
-        """Create a path query.
+        """Create a path query. `pattern` must be a path, either to a
+        file or a directory.
 
         `case_sensitive` can be a bool or `None`, indicating that the
-        behavior should depend on the platform (the default).
+        behavior should depend on the filesystem.
         """
         super(PathQuery, self).__init__(field, pattern, fast)
 
-        # By default, the case sensitivity depends on the platform.
+        # By default, the case sensitivity depends on the filesystem
+        # that the query path is located on.
         if case_sensitive is None:
-            case_sensitive = platform.system() != 'Windows'
+            path = util.bytestring_path(util.normpath(pattern))
+            case_sensitive = beets.util.case_sensitive(path)
         self.case_sensitive = case_sensitive
 
         # Use a normalized-case pattern for case-insensitive matches.
@@ -75,14 +77,25 @@ class PathQuery(dbcore.FieldQuery):
         # As a directory (prefix).
         self.dir_path = util.bytestring_path(os.path.join(self.file_path, b''))
 
+    @classmethod
+    def is_path_query(cls, query_part):
+        """Try to guess whether a unicode query part is a path query.
+
+        Condition: separator precedes colon and the file exists.
+        """
+        colon = query_part.find(':')
+        if colon != -1:
+            query_part = query_part[:colon]
+        return (os.sep in query_part
+                and os.path.exists(syspath(normpath(query_part))))
+
     def match(self, item):
         path = item.path if self.case_sensitive else item.path.lower()
         return (path == self.file_path) or path.startswith(self.dir_path)
 
     def col_clause(self):
-        file_blob = buffer(self.file_path)
-
         if self.case_sensitive:
+            file_blob = buffer(self.file_path)
             dir_blob = buffer(self.dir_path)
             return '({0} = ?) || (substr({0}, 1, ?) = ?)'.format(self.field), \
                    (file_blob, len(dir_blob), dir_blob)
@@ -90,15 +103,18 @@ class PathQuery(dbcore.FieldQuery):
         escape = lambda m: self.escape_char + m.group(0)
         dir_pattern = self.escape_re.sub(escape, self.dir_path)
         dir_blob = buffer(dir_pattern + b'%')
-        return '({0} = ?) || ({0} LIKE ? ESCAPE ?)'.format(self.field), \
-               (file_blob, dir_blob, self.escape_char)
+        file_pattern = self.escape_re.sub(escape, self.file_path)
+        file_blob = buffer(file_pattern)
+        return '({0} LIKE ? ESCAPE ?) || ({0} LIKE ? ESCAPE ?)'.format(
+            self.field), (file_blob, self.escape_char, dir_blob,
+                          self.escape_char)
 
 
 # Library-specific field types.
 
 class DateType(types.Float):
     # TODO representation should be `datetime` object
-    # TODO distinguish beetween date and time types
+    # TODO distinguish between date and time types
     query = dbcore.query.DateQuery
 
     def format(self, value):
@@ -179,31 +195,57 @@ class MusicalKey(types.String):
             return self.parse(key)
 
 
+class DurationType(types.Float):
+    """Human-friendly (M:SS) representation of a time interval."""
+    query = dbcore.query.DurationQuery
+
+    def format(self, value):
+        if not beets.config['format_raw_length'].get(bool):
+            return beets.ui.human_seconds_short(value or 0.0)
+        else:
+            return value
+
+    def parse(self, string):
+        try:
+            # Try to format back hh:ss to seconds.
+            return util.raw_seconds_short(string)
+        except ValueError:
+            # Fall back to a plain float.
+            try:
+                return float(string)
+            except ValueError:
+                return self.null
+
+
 # Library-specific sort types.
 
 class SmartArtistSort(dbcore.query.Sort):
     """Sort by artist (either album artist or track artist),
     prioritizing the sort field over the raw field.
     """
-    def __init__(self, model_cls, ascending=True):
+    def __init__(self, model_cls, ascending=True, case_insensitive=True):
         self.album = model_cls is Album
         self.ascending = ascending
+        self.case_insensitive = case_insensitive
 
     def order_clause(self):
         order = "ASC" if self.ascending else "DESC"
-        if self.album:
-            field = 'albumartist'
-        else:
-            field = 'artist'
+        field = 'albumartist' if self.album else 'artist'
+        collate = 'COLLATE NOCASE' if self.case_insensitive else ''
         return ('(CASE {0}_sort WHEN NULL THEN {0} '
                 'WHEN "" THEN {0} '
-                'ELSE {0}_sort END) {1}').format(field, order)
+                'ELSE {0}_sort END) {1} {2}').format(field, collate, order)
 
     def sort(self, objs):
         if self.album:
-            key = lambda a: a.albumartist_sort or a.albumartist
+            field = lambda a: a.albumartist_sort or a.albumartist
         else:
-            key = lambda i: i.artist_sort or i.artist
+            field = lambda i: i.artist_sort or i.artist
+
+        if self.case_insensitive:
+            key = lambda x: field(x).lower()
+        else:
+            key = field
         return sorted(objs, key=key, reverse=not self.ascending)
 
 
@@ -270,15 +312,15 @@ class LibModel(dbcore.Model):
 
     def store(self):
         super(LibModel, self).store()
-        plugins.send('database_change', lib=self._db)
+        plugins.send('database_change', lib=self._db, model=self)
 
     def remove(self):
         super(LibModel, self).remove()
-        plugins.send('database_change', lib=self._db)
+        plugins.send('database_change', lib=self._db, model=self)
 
     def add(self, lib=None):
         super(LibModel, self).add(lib)
-        plugins.send('database_change', lib=self._db)
+        plugins.send('database_change', lib=self._db, model=self)
 
     def __format__(self, spec):
         if not spec:
@@ -406,7 +448,7 @@ class Item(LibModel):
         'original_day':         types.PaddedInt(2),
         'initial_key':          MusicalKey(),
 
-        'length':      types.FLOAT,
+        'length':      DurationType(),
         'bitrate':     types.ScaledInt(1000, u'kbps'),
         'format':      types.STRING,
         'samplerate':  types.ScaledInt(1000, u'kHz'),
@@ -518,10 +560,7 @@ class Item(LibModel):
         for key in self._media_fields:
             value = getattr(mediafile, key)
             if isinstance(value, (int, long)):
-                # Filter values wider than 64 bits (in signed representation).
-                # SQLite cannot store them. py26: Post transition, we can use:
-                # value.bit_length() > 63
-                if abs(value) >= 2 ** 63:
+                if value.bit_length() > 63:
                     value = 0
             self[key] = value
 
@@ -537,11 +576,11 @@ class Item(LibModel):
         All fields in `_media_fields` are written to disk according to
         the values on this object.
 
-        `path` is the path of the mediafile to wirte the data to. It
+        `path` is the path of the mediafile to write the data to. It
         defaults to the item's path.
 
         `tags` is a dictionary of additional metadata the should be
-        written to the file.
+        written to the file. (These tags need not be in `_media_fields`.)
 
         Can raise either a `ReadError` or a `WriteError`.
         """
@@ -550,17 +589,22 @@ class Item(LibModel):
         else:
             path = normpath(path)
 
+        # Get the data to write to the file.
         item_tags = dict(self)
+        item_tags = {k: v for k, v in item_tags.items()
+                     if k in self._media_fields}  # Only write media fields.
         if tags is not None:
             item_tags.update(tags)
         plugins.send('write', item=self, path=path, tags=item_tags)
 
+        # Open the file.
         try:
             mediafile = MediaFile(syspath(path),
                                   id3v23=beets.config['id3v23'].get(bool))
         except (OSError, IOError, UnreadableFileError) as exc:
             raise ReadError(self.path, exc)
 
+        # Write the tags to the file.
         mediafile.update(item_tags)
         try:
             mediafile.save()
@@ -763,26 +807,21 @@ class Item(LibModel):
         if beets.config['asciify_paths']:
             subpath = unidecode(subpath)
 
-        # Truncate components and remove forbidden characters.
-        subpath = util.sanitize_path(subpath, self._db.replacements)
-
-        # Encode for the filesystem.
-        if not fragment:
-            subpath = bytestring_path(subpath)
-
-        # Preserve extension.
-        _, extension = os.path.splitext(self.path)
-        if fragment:
-            # Outputting Unicode.
-            extension = extension.decode('utf8', 'ignore')
-        subpath += extension.lower()
-
-        # Truncate too-long components.
         maxlen = beets.config['max_filename_length'].get(int)
         if not maxlen:
             # When zero, try to determine from filesystem.
             maxlen = util.max_filename_length(self._db.directory)
-        subpath = util.truncate_path(subpath, maxlen)
+
+        subpath, fellback = util.legalize_path(
+            subpath, self._db.replacements, maxlen,
+            os.path.splitext(self.path)[1], fragment
+        )
+        if fellback:
+            # Print an error message if legalization fell back to
+            # default replacements because of the maximum length.
+            log.warning('Fell back to default replacements when naming '
+                        'file {}. Configure replacements to avoid lengthening '
+                        'the filename.', subpath)
 
         if fragment:
             return subpath
@@ -1023,6 +1062,8 @@ class Album(LibModel):
         """Sets the album's cover art to the image at the given path.
         The image is copied (or moved) into place, replacing any
         existing art.
+
+        Sends an 'art_set' event with `self` as the sole argument.
         """
         path = bytestring_path(path)
         oldart = self.artpath
@@ -1045,6 +1086,8 @@ class Album(LibModel):
         else:
             util.move(path, artdest)
         self.artpath = artdest
+
+        plugins.send('art_set', album=self)
 
     def store(self):
         """Update the database with the album information. The album's
@@ -1093,8 +1136,7 @@ def parse_query_parts(parts, model_cls):
     path_parts = []
     non_path_parts = []
     for s in parts:
-        if s.find(os.sep, 0, s.find(':')) != -1:
-            # Separator precedes colon.
+        if PathQuery.is_path_query(s):
             path_parts.append(s)
         else:
             non_path_parts.append(s)
@@ -1119,13 +1161,8 @@ def parse_query_string(s, model_cls):
     The string is split into components using shell-like syntax.
     """
     assert isinstance(s, unicode), "Query is not unicode: {0!r}".format(s)
-
-    # A bug in Python < 2.7.3 prevents correct shlex splitting of
-    # Unicode strings.
-    # http://bugs.python.org/issue6988
-    s = s.encode('utf8')
     try:
-        parts = [p.decode('utf8') for p in shlex.split(s)]
+        parts = util.shlex_split(s)
     except ValueError as exc:
         raise dbcore.InvalidQueryError(s, exc)
     return parse_query_parts(parts, model_cls)
@@ -1279,7 +1316,7 @@ class DefaultTemplateFunctions(object):
     _prefix = b'tmpl_'
 
     def __init__(self, item=None, lib=None):
-        """Paramaterize the functions. If `item` or `lib` is None, then
+        """Parametrize the functions. If `item` or `lib` is None, then
         some functions (namely, ``aunique``) will always evaluate to the
         empty string.
         """

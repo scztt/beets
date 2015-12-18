@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
@@ -28,14 +29,16 @@ def _read(fn):
     return open(path).read()
 
 
-# Build manpages if we're making a source distribution tarball.
-if 'sdist' in sys.argv:
+def build_manpages():
     # Go into the docs directory and build the manpage.
     docdir = os.path.join(os.path.dirname(__file__), 'docs')
     curdir = os.getcwd()
     os.chdir(docdir)
     try:
         subprocess.check_call(['make', 'man'])
+    except OSError:
+        print("Could not build manpages (make man failed)!", file=sys.stderr)
+        return
     finally:
         os.chdir(curdir)
 
@@ -45,9 +48,15 @@ if 'sdist' in sys.argv:
         shutil.rmtree(mandir)
     shutil.copytree(os.path.join(docdir, '_build', 'man'), mandir)
 
+
+# Build manpages if we're making a source distribution tarball.
+if 'sdist' in sys.argv:
+    build_manpages()
+
+
 setup(
     name='beets',
-    version='1.3.11',
+    version='1.3.16',
     description='music tagger and library organizer',
     author='Adrian Sampson',
     author_email='adrian@radbox.org',
@@ -68,6 +77,7 @@ setup(
         'beetsplug.bpd',
         'beetsplug.web',
         'beetsplug.lastgenre',
+        'beetsplug.metasync',
     ],
     entry_points={
         'console_scripts': [
@@ -82,6 +92,7 @@ setup(
         'unidecode',
         'musicbrainzngs>=0.4',
         'pyyaml',
+        'jellyfish',
     ] + (['colorama'] if (sys.platform == 'win32') else []) +
         (['ordereddict'] if sys.version_info < (2, 7, 0) else []),
 
@@ -93,21 +104,25 @@ setup(
         'pylast',
         'rarfile',
         'responses',
+        'pyxdg',
+        'pathlib',
+        'python-mpd2',
     ],
 
     # Plugin (optional) dependencies:
     extras_require={
         'fetchart': ['requests'],
         'chroma': ['pyacoustid'],
-        'discogs': ['discogs-client>=2.0.0'],
+        'discogs': ['discogs-client>=2.1.0'],
         'echonest': ['pyechonest'],
         'lastgenre': ['pylast'],
-        'mpdstats': ['python-mpd'],
+        'mpdstats': ['python-mpd2'],
         'web': ['flask', 'flask-cors'],
         'import': ['rarfile'],
+        'thumbnails': ['pathlib', 'pyxdg'],
+        'metasync': ['dbus-python'],
     },
     # Non-Python/non-PyPI plugin dependencies:
-    # replaygain: mp3gain || aacgain
     # convert: ffmpeg
     # bpd: pygst
 
@@ -118,7 +133,6 @@ setup(
         'Environment :: Console',
         'Environment :: Web Environment',
         'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
     ],
 )

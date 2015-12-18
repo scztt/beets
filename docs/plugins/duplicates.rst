@@ -27,7 +27,9 @@ duplicates themselves via command-line switches ::
                         report duplicates based on arbitrary command
   -d, --delete          delete items from library and disk
   -F, --full            show all versions of duplicate tracks or albums
+  -s, --strict          report duplicates only if all attributes are set
   -k, --keys            report duplicates based on keys
+  -M, --merge           merge duplicate items
   -m DEST, --move=DEST  move items to dest
   -o DEST, --copy=DEST  copy items to dest
   -p, --path            print paths for matched items or albums
@@ -64,21 +66,32 @@ file. The available options mirror the command-line options:
   Default: :ref:`format_item`
 - **full**: List every track or album that has duplicates, not just the
   duplicates themselves.
-  Default: ``no``.
+  Default: ``no``
 - **keys**: Define in which track or album fields duplicates are to be
   searched. By default, the plugin uses the musicbrainz track and album IDs for
   this purpose. Using the ``keys`` option (as a YAML list in the configuration
   file, or as space-delimited strings in the command-line), you can extend this
   behavior to consider other attributes.
   Default: ``[mb_trackid, mb_albumid]``
+- **merge**: Merge duplicate items by consolidating tracks and-or
+  metadata where possible.
 - **move**: A destination base directory into which it will move matched
   items.
   Default: none (disabled).
 - **path**: Output the path instead of metadata when listing duplicates.
   Default: ``no``.
+- **strict**: Do not report duplicate matches if some of the
+  attributes are not defined (ie. null or empty).
+  Default: ``no``
 - **tag**: A ``key=value`` pair. The plugin will add a new ``key`` attribute
   with ``value`` value as a flexattr to the database for duplicate items.
   Default: ``no``.
+- **tiebreak**: Dictionary of lists of attributes keyed by ``items``
+  or ``albums`` to use when choosing duplicates. By default, the
+  tie-breaking procedure favors the most complete metadata attribute
+  set. If you would like to consider the lower bitrates as duplicates,
+  for example, set ``tiebreak: items: [bitrate]``.
+  Default: ``{}``.
 
 Examples
 --------
@@ -131,5 +144,12 @@ Tag duplicate items with some flag::
 
   beet duplicates --tag dup=1
 
+Ignore items with undefined keys::
+
+  beet duplicates --strict
+
+Merge and delete duplicate albums with different missing tracks::
+
+  beet duplicates --album --merge --delete
 
 .. _spark: https://github.com/holman/spark

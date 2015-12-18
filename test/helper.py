@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Thomas Scholtes.
 #
@@ -15,7 +16,7 @@
 """This module includes various helpers that provide fixtures, capture
 information or mock the environment.
 
-- The `control_stdin` and `capture_output` context managers allow one to
+- The `control_stdin` and `capture_stdout` context managers allow one to
   interact with the user interface.
 
 - `has_program` checks the presence of a command on the system.
@@ -51,7 +52,7 @@ from beets.library import Library, Item, Album
 from beets import importer
 from beets.autotag.hooks import AlbumInfo, TrackInfo
 from beets.mediafile import MediaFile, Image
-from beets.ui import _encoding
+from beets.ui import _arg_encoding
 
 # TODO Move AutotagMock here
 from test import _common
@@ -121,7 +122,7 @@ def has_program(cmd, args=['--version']):
     full_cmd = [cmd] + args
     for i, elem in enumerate(full_cmd):
         if isinstance(elem, unicode):
-            full_cmd[i] = elem.encode(_encoding())
+            full_cmd[i] = elem.encode(_arg_encoding())
     try:
         with open(os.devnull, 'wb') as devnull:
             subprocess.check_call(full_cmd, stderr=devnull,

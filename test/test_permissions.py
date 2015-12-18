@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """Tests for the 'permissions' plugin.
 """
 from __future__ import (division, absolute_import, print_function,
@@ -34,8 +36,7 @@ class PermissionsPluginTest(unittest.TestCase, TestHelper):
         dir_perm = self.config['permissions']['dir'].get()
         dir_perm = convert_perm(dir_perm)
 
-        music_dirs = dirs_in_library(self.config['directory'].get(),
-                                     item.path)
+        music_dirs = dirs_in_library(self.lib.directory, item.path)
 
         self.assertTrue(check_permissions(item.path, file_perm))
         self.assertFalse(check_permissions(item.path, convert_perm(644)))
@@ -56,8 +57,7 @@ class PermissionsPluginTest(unittest.TestCase, TestHelper):
         dir_perm = self.config['permissions']['dir'].get()
         dir_perm = convert_perm(dir_perm)
 
-        music_dirs = dirs_in_library(self.config['directory'].get(),
-                                     item.path)
+        music_dirs = dirs_in_library(self.lib.directory, item.path)
 
         self.assertTrue(check_permissions(item.path, file_perm))
         self.assertFalse(check_permissions(item.path, convert_perm(644)))

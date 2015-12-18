@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -16,13 +17,12 @@
 
 from __future__ import (division, absolute_import, print_function,
                         unicode_literals)
-
 import os
 import sys
 import re
 import shutil
 import fnmatch
-from collections import defaultdict
+from collections import Counter
 import traceback
 import subprocess
 import platform
@@ -546,6 +546,78 @@ def truncate_path(path, length=MAX_FILENAME_LENGTH):
     return os.path.join(*out)
 
 
+def _legalize_stage(path, replacements, length, extension, fragment):
+    """Perform a single round of path legalization steps
+    (sanitation/replacement, encoding from Unicode to bytes,
+    extension-appending, and truncation). Return the path (Unicode if
+    `fragment` is set, `bytes` otherwise) and whether truncation was
+    required.
+    """
+    # Perform an initial sanitization including user replacements.
+    path = sanitize_path(path, replacements)
+
+    # Encode for the filesystem.
+    if not fragment:
+        path = bytestring_path(path)
+
+    # Preserve extension.
+    path += extension.lower()
+
+    # Truncate too-long components.
+    pre_truncate_path = path
+    path = truncate_path(path, length)
+
+    return path, path != pre_truncate_path
+
+
+def legalize_path(path, replacements, length, extension, fragment):
+    """Given a path-like Unicode string, produce a legal path. Return
+    the path and a flag indicating whether some replacements had to be
+    ignored (see below).
+
+    The legalization process (see `_legalize_stage`) consists of
+    applying the sanitation rules in `replacements`, encoding the string
+    to bytes (unless `fragment` is set), truncating components to
+    `length`, appending the `extension`.
+
+    This function performs up to three calls to `_legalize_stage` in
+    case truncation conflicts with replacements (as can happen when
+    truncation creates whitespace at the end of the string, for
+    example). The limited number of iterations iterations avoids the
+    possibility of an infinite loop of sanitation and truncation
+    operations, which could be caused by replacement rules that make the
+    string longer. The flag returned from this function indicates that
+    the path has to be truncated twice (indicating that replacements
+    made the string longer again after it was truncated); the
+    application should probably log some sort of warning.
+    """
+
+    if fragment:
+        # Outputting Unicode.
+        extension = extension.decode('utf8', 'ignore')
+
+    first_stage_path, _ = _legalize_stage(
+        path, replacements, length, extension, fragment
+    )
+
+    # Convert back to Unicode with extension removed.
+    first_stage_path, _ = os.path.splitext(displayable_path(first_stage_path))
+
+    # Re-sanitize following truncation (including user replacements).
+    second_stage_path, retruncated = _legalize_stage(
+        first_stage_path, replacements, length, extension, fragment
+    )
+
+    # If the path was once again truncated, discard user replacements
+    # and run through one last legalization stage.
+    if retruncated:
+        second_stage_path, _ = _legalize_stage(
+            first_stage_path, None, length, extension, fragment
+        )
+
+    return second_stage_path, retruncated
+
+
 def str2bool(value):
     """Returns a boolean reflecting a human-entered string."""
     return value.lower() in ('yes', '1', 'true', 't', 'y')
@@ -565,51 +637,15 @@ def as_string(value):
         return unicode(value)
 
 
-def levenshtein(s1, s2):
-    """A nice DP edit distance implementation from Wikibooks:
-    http://en.wikibooks.org/wiki/Algorithm_implementation/Strings/
-    Levenshtein_distance#Python
-    """
-    if len(s1) < len(s2):
-        return levenshtein(s2, s1)
-    if not s1:
-        return len(s2)
-
-    previous_row = xrange(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-
-    return previous_row[-1]
-
-
 def plurality(objs):
-    """Given a sequence of comparable objects, returns the object that
-    is most common in the set and the frequency of that object. The
+    """Given a sequence of hashble objects, returns the object that
+    is most common in the set and the its number of appearance. The
     sequence must contain at least one object.
     """
-    # Calculate frequencies.
-    freqs = defaultdict(int)
-    for obj in objs:
-        freqs[obj] += 1
-
-    if not freqs:
+    c = Counter(objs)
+    if not c:
         raise ValueError('sequence must be non-empty')
-
-    # Find object with maximum frequency.
-    max_freq = 0
-    res = None
-    for obj, freq in freqs.items():
-        if freq > max_freq:
-            max_freq = freq
-            res = obj
-
-    return res, max_freq
+    return c.most_common(1)[0]
 
 
 def cpu_count():
@@ -625,8 +661,8 @@ def cpu_count():
             num = 0
     elif sys.platform == b'darwin':
         try:
-            num = int(command_output([b'sysctl', b'-n', b'hw.ncpu']))
-        except ValueError:
+            num = int(command_output([b'/usr/sbin/sysctl', b'-n', b'hw.ncpu']))
+        except (ValueError, OSError, subprocess.CalledProcessError):
             num = 0
     else:
         try:
@@ -650,9 +686,8 @@ def command_output(cmd, shell=False):
     ``subprocess.CalledProcessError`` is raised. May also raise
     ``OSError``.
 
-    This replaces `subprocess.check_output`, which isn't available in
-    Python 2.6 and which can have problems if lots of output is sent to
-    stderr.
+    This replaces `subprocess.check_output` which can have problems if lots of
+    output is sent to stderr.
     """
     proc = subprocess.Popen(
         cmd,
@@ -665,7 +700,8 @@ def command_output(cmd, shell=False):
     if proc.returncode:
         raise subprocess.CalledProcessError(
             returncode=proc.returncode,
-            cmd=' '.join(cmd),
+            cmd=b' '.join(cmd),
+            output=stdout + stderr,
         )
     return stdout
 
@@ -701,24 +737,123 @@ def open_anything():
     return base_cmd
 
 
-def interactive_open(target, command=None):
-    """Open `target` file with `command` or, in not available, ask the OS to
-    deal with it.
+def editor_command():
+    """Get a command for opening a text file.
 
-    The executed program will have stdin, stdout and stderr.
-    OSError may be raised, it is left to the caller to catch them.
+    Use the `EDITOR` environment variable by default. If it is not
+    present, fall back to `open_anything()`, the platform-specific tool
+    for opening files in general.
     """
-    if command:
-        command = command.encode('utf8')
-        try:
-            command = [c.decode('utf8')
-                       for c in shlex.split(command)]
-        except ValueError:  # Malformed shell tokens.
-            command = [command]
-        command.insert(0, command[0])  # for argv[0]
-    else:
-        base_cmd = open_anything()
-        command = [base_cmd, base_cmd]
+    editor = os.environ.get('EDITOR')
+    if editor:
+        return editor
+    return open_anything()
 
-    command.append(target)
+
+def shlex_split(s):
+    """Split a Unicode or bytes string according to shell lexing rules.
+
+    Raise `ValueError` if the string is not a well-formed shell string.
+    This is a workaround for a bug in some versions of Python.
+    """
+    if isinstance(s, bytes):
+        # Shlex works fine.
+        return shlex.split(s)
+
+    elif isinstance(s, unicode):
+        # Work around a Python bug.
+        # http://bugs.python.org/issue6988
+        bs = s.encode('utf8')
+        return [c.decode('utf8') for c in shlex.split(bs)]
+
+    else:
+        raise TypeError('shlex_split called with non-string')
+
+
+def interactive_open(targets, command):
+    """Open the files in `targets` by `exec`ing a new `command`, given
+    as a Unicode string. (The new program takes over, and Python
+    execution ends: this does not fork a subprocess.)
+
+    Can raise `OSError`.
+    """
+    # Split the command string into its arguments.
+    try:
+        command = shlex_split(command)
+    except ValueError:  # Malformed shell tokens.
+        command = [command]
+    command.insert(0, command[0])  # for argv[0]
+
+    command += targets
+
     return os.execlp(*command)
+
+
+def _windows_long_path_name(short_path):
+    """Use Windows' `GetLongPathNameW` via ctypes to get the canonical,
+    long path given a short filename.
+    """
+    if not isinstance(short_path, unicode):
+        short_path = unicode(short_path)
+
+    import ctypes
+    buf = ctypes.create_unicode_buffer(260)
+    get_long_path_name_w = ctypes.windll.kernel32.GetLongPathNameW
+    return_value = get_long_path_name_w(short_path, buf, 260)
+
+    if return_value == 0 or return_value > 260:
+        # An error occurred
+        return short_path
+    else:
+        long_path = buf.value
+        # GetLongPathNameW does not change the case of the drive
+        # letter.
+        if len(long_path) > 1 and long_path[1] == ':':
+            long_path = long_path[0].upper() + long_path[1:]
+        return long_path
+
+
+def case_sensitive(path):
+    """Check whether the filesystem at the given path is case sensitive.
+
+    To work best, the path should point to a file or a directory. If the path
+    does not exist, assume a case sensitive file system on every platform
+    except Windows.
+    """
+    # A fallback in case the path does not exist.
+    if not os.path.exists(syspath(path)):
+        # By default, the case sensitivity depends on the platform.
+        return platform.system() != 'Windows'
+
+    # If an upper-case version of the path exists but a lower-case
+    # version does not, then the filesystem must be case-sensitive.
+    # (Otherwise, we have more work to do.)
+    if not (os.path.exists(syspath(path.lower())) and
+            os.path.exists(syspath(path.upper()))):
+        return True
+
+    # Both versions of the path exist on the file system. Check whether
+    # they refer to different files by their inodes. Alas,
+    # `os.path.samefile` is only available on Unix systems on Python 2.
+    if platform.system() != 'Windows':
+        return not os.path.samefile(syspath(path.lower()),
+                                    syspath(path.upper()))
+
+    # On Windows, we check whether the canonical, long filenames for the
+    # files are the same.
+    lower = _windows_long_path_name(path.lower())
+    upper = _windows_long_path_name(path.upper())
+    return lower != upper
+
+
+def raw_seconds_short(string):
+    """Formats a human-readable M:SS string as a float (number of seconds).
+
+    Raises ValueError if the conversion cannot take place due to `string` not
+    being in the right format.
+    """
+    match = re.match('^(\d+):([0-5]\d)$', string)
+    if not match:
+        raise ValueError('String not in M:SS format')
+    minutes, seconds = map(int, match.groups())
+    return float(minutes * 60 + seconds)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -24,7 +25,7 @@ import tempfile
 from string import Template
 import subprocess
 
-from beets import util, config, plugins, ui
+from beets import util, plugins, ui
 from beets.dbcore import types
 import pyechonest
 import pyechonest.song
@@ -135,6 +136,7 @@ class EchonestMetadataPlugin(plugins.BeetsPlugin):
             'truncate': True,
         })
         self.config.add(ATTRIBUTES)
+        self.config['apikey'].redact = True
 
         pyechonest.config.ECHO_NEST_API_KEY = \
             self.config['apikey'].get(unicode)
@@ -288,7 +290,7 @@ class EchonestMetadataPlugin(plugins.BeetsPlugin):
         pending.
         This is stolen from Jakob Schnitzers convert plugin.
         """
-        fd, dest = tempfile.mkstemp(u'.ogg')
+        fd, dest = tempfile.mkstemp(b'.ogg')
         os.close(fd)
 
         self._log.info(u'encoding {0} to {1}',
@@ -471,7 +473,7 @@ class EchonestMetadataPlugin(plugins.BeetsPlugin):
 
         def fetch_func(lib, opts, args):
             self.config.set_args(opts)
-            write = config['import']['write'].get(bool)
+            write = ui.should_write()
             for item in lib.items(ui.decargs(args)):
                 self._log.info(u'{0}', item)
                 if self.config['force'] or self.requires_update(item):

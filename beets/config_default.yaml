@@ -44,9 +44,10 @@ threaded: yes
 timeout: 5.0
 per_disc_numbering: no
 verbose: 0
-terminal_encoding: utf8
+terminal_encoding:
 original_date: no
 id3v23: no
+va_name: "Various Artists"
 
 ui:
     terminal_width: 80
@@ -64,9 +65,11 @@ ui:
 format_item: $artist - $album - $title
 format_album: $albumartist - $album
 time_format: '%Y-%m-%d %H:%M:%S'
+format_raw_length: no
 
 sort_album: albumartist+ album+
 sort_item: artist+ album+ disc+ track+
+sort_case_insensitive: yes
 
 paths:
     default: $albumartist/$album%aunique{}/$track $title

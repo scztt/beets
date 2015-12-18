@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Adrian Sampson.
 #
@@ -19,10 +20,12 @@ from __future__ import division, absolute_import, print_function
 import re
 import itertools
 from . import query
-
+import beets
 
 PARSE_QUERY_PART_REGEX = re.compile(
     # Non-capturing optional segment for the keyword.
+    r'(-|\^)?'   # Negation prefixes.
+
     r'(?:'
     r'(\S+?)'    # The field key.
     r'(?<!\\):'  # Unescaped :
@@ -37,9 +40,9 @@ PARSE_QUERY_PART_REGEX = re.compile(
 def parse_query_part(part, query_classes={}, prefixes={},
                      default_class=query.SubstringQuery):
     """Take a query in the form of a key/value pair separated by a
-    colon and return a tuple of `(key, value, cls)`. `key` may be None,
+    colon and return a tuple of `(key, value, cls, negate)`. `key` may be None,
     indicating that any field may be matched. `cls` is a subclass of
-    `FieldQuery`.
+    `FieldQuery`. `negate` is a boolean indicating if the query is negated.
 
     The optional `query_classes` parameter maps field names to default
     query types; `default_class` is the fallback. `prefixes` is a map
@@ -53,10 +56,11 @@ def parse_query_part(part, query_classes={}, prefixes={},
     class is available, `default_class` is used.
 
     For instance,
-    'stapler' -> (None, 'stapler', SubstringQuery)
-    'color:red' -> ('color', 'red', SubstringQuery)
-    ':^Quiet' -> (None, '^Quiet', RegexpQuery)
-    'color::b..e' -> ('color', 'b..e', RegexpQuery)
+    'stapler' -> (None, 'stapler', SubstringQuery, False)
+    'color:red' -> ('color', 'red', SubstringQuery, False)
+    ':^Quiet' -> (None, '^Quiet', RegexpQuery, False)
+    'color::b..e' -> ('color', 'b..e', RegexpQuery, False)
+    '-color:red' -> ('color', 'red', SubstringQuery, True)
 
     Prefixes may be "escaped" with a backslash to disable the keying
     behavior.
@@ -64,18 +68,19 @@ def parse_query_part(part, query_classes={}, prefixes={},
     part = part.strip()
     match = PARSE_QUERY_PART_REGEX.match(part)
 
-    assert match  # Regex should always match.
-    key = match.group(1)
-    term = match.group(2).replace('\:', ':')
+    assert match  # Regex should always match
+    negate = bool(match.group(1))
+    key = match.group(2)
+    term = match.group(3).replace('\:', ':')
 
     # Match the search term against the list of prefixes.
     for pre, query_class in prefixes.items():
         if term.startswith(pre):
-            return key, term[len(pre):], query_class
+            return key, term[len(pre):], query_class, negate
 
     # No matching prefix: use type-based or fallback/default query.
     query_class = query_classes.get(key, default_class)
-    return key, term, query_class
+    return key, term, query_class, negate
 
 
 def construct_query_part(model_cls, prefixes, query_part):
@@ -93,7 +98,7 @@ def construct_query_part(model_cls, prefixes, query_part):
         query_classes[k] = t.query
 
     # Parse the string.
-    key, pattern, query_class = \
+    key, pattern, query_class, negate = \
         parse_query_part(query_part, query_classes, prefixes)
 
     # No key specified.
@@ -102,14 +107,24 @@ def construct_query_part(model_cls, prefixes, query_part):
             # The query type matches a specific field, but none was
             # specified. So we use a version of the query that matches
             # any field.
-            return query.AnyFieldQuery(pattern, model_cls._search_fields,
-                                       query_class)
+            q = query.AnyFieldQuery(pattern, model_cls._search_fields,
+                                    query_class)
+            if negate:
+                return query.NotQuery(q)
+            else:
+                return q
         else:
             # Other query type.
-            return query_class(pattern)
+            if negate:
+                return query.NotQuery(query_class(pattern))
+            else:
+                return query_class(pattern)
 
     key = key.lower()
-    return query_class(key.lower(), pattern, key in model_cls._fields)
+    q = query_class(key.lower(), pattern, key in model_cls._fields)
+    if negate:
+        return query.NotQuery(q)
+    return q
 
 
 def query_from_strings(query_cls, model_cls, prefixes, query_parts):
@@ -138,13 +153,15 @@ def construct_sort_part(model_cls, part):
     assert direction in ('+', '-'), "part must end with + or -"
     is_ascending = direction == '+'
 
+    case_insensitive = beets.config['sort_case_insensitive'].get(bool)
     if field in model_cls._sorts:
-        sort = model_cls._sorts[field](model_cls, is_ascending)
+        sort = model_cls._sorts[field](model_cls, is_ascending,
+                                       case_insensitive)
     elif field in model_cls._fields:
-        sort = query.FixedFieldSort(field, is_ascending)
+        sort = query.FixedFieldSort(field, is_ascending, case_insensitive)
     else:
         # Flexible or computed.
-        sort = query.SlowFieldSort(field, is_ascending)
+        sort = query.SlowFieldSort(field, is_ascending, case_insensitive)
     return sort
 
 
@@ -152,31 +169,50 @@ def sort_from_strings(model_cls, sort_parts):
     """Create a `Sort` from a list of sort criteria (strings).
     """
     if not sort_parts:
-        return query.NullSort()
+        sort = query.NullSort()
+    elif len(sort_parts) == 1:
+        sort = construct_sort_part(model_cls, sort_parts[0])
     else:
         sort = query.MultipleSort()
         for part in sort_parts:
             sort.add_sort(construct_sort_part(model_cls, part))
-        return sort
+    return sort
 
 
-def parse_sorted_query(model_cls, parts, prefixes={},
-                       query_cls=query.AndQuery):
+def parse_sorted_query(model_cls, parts, prefixes={}):
     """Given a list of strings, create the `Query` and `Sort` that they
     represent.
     """
     # Separate query token and sort token.
     query_parts = []
     sort_parts = []
-    for part in parts:
-        if part.endswith((u'+', u'-')) and u':' not in part:
-            sort_parts.append(part)
-        else:
-            query_parts.append(part)
 
-    # Parse each.
-    q = query_from_strings(
-        query_cls, model_cls, prefixes, query_parts
-    )
+    # Split up query in to comma-separated subqueries, each representing
+    # an AndQuery, which need to be joined together in one OrQuery
+    subquery_parts = []
+    for part in parts + [u',']:
+        if part.endswith(u','):
+            # Ensure we can catch "foo, bar" as well as "foo , bar"
+            last_subquery_part = part[:-1]
+            if last_subquery_part:
+                subquery_parts.append(last_subquery_part)
+            # Parse the subquery in to a single AndQuery
+            # TODO: Avoid needlessly wrapping AndQueries containing 1 subquery?
+            query_parts.append(query_from_strings(
+                query.AndQuery, model_cls, prefixes, subquery_parts
+            ))
+            del subquery_parts[:]
+        else:
+            # Sort parts (1) end in + or -, (2) don't have a field, and
+            # (3) consist of more than just the + or -.
+            if part.endswith((u'+', u'-')) \
+                    and u':' not in part \
+                    and len(part) > 1:
+                sort_parts.append(part)
+            else:
+                subquery_parts.append(part)
+
+    # Avoid needlessly wrapping single statements in an OR
+    q = query.OrQuery(query_parts) if len(query_parts) > 1 else query_parts[0]
     s = sort_from_strings(model_cls, sort_parts)
     return q, s

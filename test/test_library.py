@@ -25,6 +25,7 @@ import shutil
 import re
 import unicodedata
 import sys
+import time
 
 from test import _common
 from test._common import unittest
@@ -36,6 +37,7 @@ from beets import util
 from beets import plugins
 from beets import config
 from beets.mediafile import MediaFile
+from beets.util import syspath
 from test.helper import TestHelper
 
 # Shortcut to path normalization.
@@ -452,8 +454,7 @@ class DestinationTest(_common.TestCase):
         self.assertEqual(self.i.destination(),
                          np('base/one/_.mp3'))
 
-    @unittest.skip('unimplemented: #496')
-    def test_truncation_does_not_conflict_with_replacement(self):
+    def test_legalize_path_one_for_one_replacement(self):
         # Use a replacement that should always replace the last X in any
         # path component with a Z.
         self.lib.replacements = [
@@ -466,7 +467,23 @@ class DestinationTest(_common.TestCase):
 
         # The final path should reflect the replacement.
         dest = self.i.destination()
-        self.assertTrue('XZ' in dest)
+        self.assertEqual(dest[-2:], 'XZ')
+
+    def test_legalize_path_one_for_many_replacement(self):
+        # Use a replacement that should always replace the last X in any
+        # path component with four Zs.
+        self.lib.replacements = [
+            (re.compile(r'X$'), u'ZZZZ'),
+        ]
+
+        # Construct an item whose untruncated path ends with a Y but whose
+        # truncated version ends with an X.
+        self.i.title = 'X' * 300 + 'Y'
+
+        # The final path should ignore the user replacement and create a path
+        # of the correct length, containing Xs.
+        dest = self.i.destination()
+        self.assertEqual(dest[-2:], 'XX')
 
 
 class ItemFormattedMappingTest(_common.LibTestCase):
@@ -1029,7 +1046,7 @@ class WriteTest(unittest.TestCase, TestHelper):
 
     def test_no_write_permission(self):
         item = self.add_item_fixture()
-        path = item.path
+        path = syspath(item.path)
         os.chmod(path, stat.S_IRUSR)
 
         try:
@@ -1042,7 +1059,7 @@ class WriteTest(unittest.TestCase, TestHelper):
     def test_write_with_custom_path(self):
         item = self.add_item_fixture()
         custom_path = os.path.join(self.temp_dir, 'custom.mp3')
-        shutil.copy(item.path, custom_path)
+        shutil.copy(syspath(item.path), syspath(custom_path))
 
         item['artist'] = 'new artist'
         self.assertNotEqual(MediaFile(custom_path).artist, 'new artist')
@@ -1057,6 +1074,14 @@ class WriteTest(unittest.TestCase, TestHelper):
         item.write(tags={'artist': 'new artist'})
         self.assertNotEqual(item.artist, 'new artist')
         self.assertEqual(MediaFile(item.path).artist, 'new artist')
+
+    def test_write_date_field(self):
+        # Since `date` is not a MediaField, this should do nothing.
+        item = self.add_item_fixture()
+        clean_year = item.year
+        item.date = 'foo'
+        item.write()
+        self.assertEqual(MediaFile(item.path).year, clean_year)
 
 
 class ItemReadTest(unittest.TestCase):
@@ -1101,6 +1126,58 @@ class ParseQueryTest(unittest.TestCase):
     def test_parse_bytes(self):
         with self.assertRaises(AssertionError):
             beets.library.parse_query_string(b"query", None)
+
+
+class LibraryFieldTypesTest(unittest.TestCase):
+    """Test format() and parse() for library-specific field types"""
+    def test_datetype(self):
+        t = beets.library.DateType()
+
+        # format
+        time_local = time.strftime(beets.config['time_format'].get(unicode),
+                                   time.localtime(123456789))
+        self.assertEqual(time_local, t.format(123456789))
+        # parse
+        self.assertEqual(123456789.0, t.parse(time_local))
+        self.assertEqual(123456789.0, t.parse('123456789.0'))
+        self.assertEqual(t.null, t.parse('not123456789.0'))
+        self.assertEqual(t.null, t.parse('1973-11-29'))
+
+    def test_pathtype(self):
+        t = beets.library.PathType()
+
+        # format
+        self.assertEqual('/tmp', t.format('/tmp'))
+        self.assertEqual(u'/tmp/\xe4lbum', t.format(u'/tmp/\u00e4lbum'))
+        # parse
+        self.assertEqual(b'/tmp', t.parse('/tmp'))
+        self.assertEqual(b'/tmp/\xc3\xa4lbum', t.parse(u'/tmp/\u00e4lbum/'))
+
+    def test_musicalkey(self):
+        t = beets.library.MusicalKey()
+
+        # parse
+        self.assertEqual('C#m', t.parse('c#m'))
+        self.assertEqual('Gm', t.parse('g   minor'))
+        self.assertEqual('Not c#m', t.parse('not C#m'))
+
+    def test_durationtype(self):
+        t = beets.library.DurationType()
+
+        # format
+        self.assertEqual('1:01', t.format(61.23))
+        self.assertEqual('60:01', t.format(3601.23))
+        self.assertEqual('0:00', t.format(None))
+        # parse
+        self.assertEqual(61.0, t.parse('1:01'))
+        self.assertEqual(61.23, t.parse('61.23'))
+        self.assertEqual(3601.0, t.parse('60:01'))
+        self.assertEqual(t.null, t.parse('1:00:01'))
+        self.assertEqual(t.null, t.parse('not61.23'))
+        # config format_raw_length
+        beets.config['format_raw_length'] = True
+        self.assertEqual(61.23, t.format(61.23))
+        self.assertEqual(3601.23, t.format(3601.23))
 
 
 def suite():

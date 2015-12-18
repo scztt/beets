@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Thomas Scholtes
 #
@@ -108,6 +109,12 @@ class EchonestCliTest(unittest.TestCase, TestHelper):
         # Assert uploaded file was converted
         self.assertNotEqual(item.path,
                             echonest_track.call_args[1]['filename'])
+
+    @patch('pyechonest.song.search')
+    @patch('beetsplug.echonest.CONVERT_COMMAND', 'cp $source $dest')
+    def test_analyze_convert2(self, echonest_search):
+        self.add_item(format='FLAC', path=b'm\xc3\xacn.flac')
+        self.run_command('echonest')
 
     @patch('pyechonest.song.profile')
     @patch('pyechonest.song.search')

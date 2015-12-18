@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Thomas Scholtes
 #
@@ -32,6 +33,11 @@ if any(has_program(cmd, ['-v']) for cmd in ['mp3gain', 'aacgain']):
     GAIN_PROG_AVAILABLE = True
 else:
     GAIN_PROG_AVAILABLE = False
+
+if has_program('bs1770gain', ['--replaygain']):
+    LOUDNESS_PROG_AVAILABLE = True
+else:
+    LOUDNESS_PROG_AVAILABLE = False
 
 
 class ReplayGainCliTestBase(TestHelper):
@@ -130,6 +136,11 @@ class ReplayGainGstCliTest(ReplayGainCliTestBase, unittest.TestCase):
 @unittest.skipIf(not GAIN_PROG_AVAILABLE, 'no *gain command found')
 class ReplayGainCmdCliTest(ReplayGainCliTestBase, unittest.TestCase):
     backend = u'command'
+
+
+@unittest.skipIf(not LOUDNESS_PROG_AVAILABLE, 'bs1770gain cannot be found')
+class ReplayGainLdnsCliTest(ReplayGainCliTestBase, unittest.TestCase):
+    backend = u'bs1770gain'
 
 
 def suite():

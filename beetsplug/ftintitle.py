@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Verrus, <github.com/Verrus/beets-plugin-featInTitle>
 #
@@ -22,7 +23,6 @@ import re
 from beets import plugins
 from beets import ui
 from beets.util import displayable_path
-from beets import config
 
 
 def split_on_feat(artist):
@@ -82,6 +82,7 @@ class FtInTitlePlugin(plugins.BeetsPlugin):
         self.config.add({
             'auto': True,
             'drop': False,
+            'format': u'feat. {0}',
         })
 
         self._command = ui.Subcommand(
@@ -101,7 +102,7 @@ class FtInTitlePlugin(plugins.BeetsPlugin):
         def func(lib, opts, args):
             self.config.set_args(opts)
             drop_feat = self.config['drop'].get(bool)
-            write = config['import']['write'].get(bool)
+            write = ui.should_write()
 
             for item in lib.items(ui.decargs(args)):
                 self.ft_in_title(item, drop_feat)
@@ -137,7 +138,9 @@ class FtInTitlePlugin(plugins.BeetsPlugin):
         # Only update the title if it does not already contain a featured
         # artist and if we do not drop featuring information.
         if not drop_feat and not contains_feat(item.title):
-            new_title = u"{0} feat. {1}".format(item.title, feat_part)
+            feat_format = self.config['format'].get(unicode)
+            new_format = feat_format.format(feat_part)
+            new_title = u"{0} {1}".format(item.title, new_format)
             self._log.info(u'title: {0} -> {1}', item.title, new_title)
             item.title = new_title
 
@@ -153,7 +156,7 @@ class FtInTitlePlugin(plugins.BeetsPlugin):
         # that case, we attempt to move the featured artist to the title.
         _, featured = split_on_feat(artist)
         if featured and albumartist != artist and albumartist:
-            self._log.info(displayable_path(item.path))
+            self._log.info('{}', displayable_path(item.path))
 
             feat_part = None
 

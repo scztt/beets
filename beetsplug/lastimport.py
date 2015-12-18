@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file is part of beets.
 # Copyright 2015, Rafael Bodill http://github.com/rafi
 #
@@ -32,6 +33,7 @@ class LastImportPlugin(plugins.BeetsPlugin):
             'user':     '',
             'api_key':  '',
         })
+        config['lastfm']['api_key'].redact = True
         self.config.add({
             'per_page': 500,
             'retry_limit': 3,
@@ -51,8 +53,8 @@ class LastImportPlugin(plugins.BeetsPlugin):
 
 
 def import_lastfm(lib, log):
-    user = config['lastfm']['user']
-    per_page = config['lastimport']['per_page']
+    user = config['lastfm']['user'].get(unicode)
+    per_page = config['lastimport']['per_page'].get(int)
 
     if not user:
         raise ui.UserError('You must specify a user name for lastimport')
@@ -87,6 +89,7 @@ def import_lastfm(lib, log):
             else:
                 log.error('ERROR: unable to read page #{0}',
                           page_current + 1)
+                log.debug('API response: {}', page)
                 if retry < retry_limit:
                     log.info(
                         'Retrying page #{0}... ({1}/{2} retry)',
