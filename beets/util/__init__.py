@@ -446,6 +446,7 @@ def move(path, dest, replace=False):
         # Otherwise, copy and delete the original.
         try:
             shutil.copyfile(path, dest)
+            shutil.copystat(path, dest)
             os.remove(path)
         except (OSError, IOError) as exc:
             raise FilesystemError(exc, 'move', (path, dest),
