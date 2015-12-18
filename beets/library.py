@@ -919,7 +919,7 @@ class Album(LibModel):
         same directory as the items.
         """
         old_art = self.artpath
-        if not old_art:
+        if not old_art or not(os.path.exists(old_art)):
             return
 
         new_art = self.art_destination(old_art)
