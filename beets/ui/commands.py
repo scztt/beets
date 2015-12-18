@@ -1243,7 +1243,12 @@ def modify_items(lib, mods, dels, query, write, move, album, confirm):
            .format(len(objs), 'album' if album else 'item'))
     changed = set()
     for obj in objs:
-        obj.update(mods)
+        obj_mods = mods.copy()
+        for key, val in obj_mods.iteritems():
+            if isinstance(val, basestring):
+                obj_mods[key] = obj.evaluate_template(val)
+
+        obj.update(obj_mods)
         for field in dels:
             try:
                 del obj[field]
