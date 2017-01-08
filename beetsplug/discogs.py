@@ -57,7 +57,7 @@ class DiscogsPlugin(BeetsPlugin):
             'apikey': 'rAzVUQYRaoFjeBjyWuWZ',
             'apisecret': 'plxtUTqoCzwxZpqdPysCwGuBSmZNdZVy',
             'tokenfile': 'discogs_token.json',
-            'source_weight': 0.5,
+            'source_weight': 1,
         })
         self.config['apikey'].redact = True
         self.config['apisecret'].redact = True
@@ -130,6 +130,7 @@ class DiscogsPlugin(BeetsPlugin):
         dist = Distance()
         if album_info.data_source == 'Discogs':
             dist.add('source', self.config['source_weight'].as_number())
+
         return dist
 
     def candidates(self, items, artist, album, va_likely):
