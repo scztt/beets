@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Adrian Sampson.
+# Copyright 2016, Adrian Sampson.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -16,15 +16,14 @@
 """Facilities for automatically determining files' correct metadata.
 """
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 from beets import logging
 from beets import config
 
 # Parts of external interface.
 from .hooks import AlbumInfo, TrackInfo, AlbumMatch, TrackMatch  # noqa
-from .match import tag_item, tag_album  # noqa
+from .match import tag_item, tag_album, Proposal  # noqa
 from .match import Recommendation  # noqa
 
 # Global logger.
@@ -45,6 +44,14 @@ def apply_item_metadata(item, track_info):
         item.mb_artistid = track_info.artist_id
     if track_info.data_source:
         item.data_source = track_info.data_source
+
+    if track_info.lyricist is not None:
+        item.lyricist = track_info.lyricist
+    if track_info.composer is not None:
+        item.composer = track_info.composer
+    if track_info.arranger is not None:
+        item.arranger = track_info.arranger
+
     # At the moment, the other metadata is left intact (including album
     # and track number). Perhaps these should be emptied?
 
@@ -53,7 +60,7 @@ def apply_metadata(album_info, mapping):
     """Set the items' metadata to match an AlbumInfo object using a
     mapping from Items to TrackInfo objects.
     """
-    for item, track_info in mapping.iteritems():
+    for item, track_info in mapping.items():
         # Album, artist, track count.
         if track_info.artist:
             item.artist = track_info.artist
@@ -98,8 +105,9 @@ def apply_metadata(album_info, mapping):
         if config['per_disc_numbering']:
             # We want to let the track number be zero, but if the medium index
             # is not provided we need to fall back to the overall index.
-            item.track = track_info.medium_index
-            if item.track is None:
+            if track_info.medium_index is not None:
+                item.track = track_info.medium_index
+            else:
                 item.track = track_info.index
             item.tracktotal = track_info.medium_total or len(album_info.tracks)
         else:
@@ -142,3 +150,10 @@ def apply_metadata(album_info, mapping):
 
         if track_info.media is not None:
             item.media = track_info.media
+
+        if track_info.lyricist is not None:
+            item.lyricist = track_info.lyricist
+        if track_info.composer is not None:
+            item.composer = track_info.composer
+        if track_info.arranger is not None:
+            item.arranger = track_info.arranger

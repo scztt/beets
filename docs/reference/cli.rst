@@ -132,6 +132,11 @@ Optional command flags:
   option. If set, beets will just print a list of files that it would
   otherwise import.
 
+* If you already have a metadata backend ID that matches the items to be
+  imported, you can instruct beets to restrict the search to that ID instead of
+  searching for other candidates by using the ``--search-id SEARCH_ID`` option.
+  Multiple IDs can be specified by simply repeating the option several times.
+
 .. _rarfile: https://pypi.python.org/pypi/rarfile/2.2
 
 .. only:: html
@@ -206,7 +211,7 @@ remove
 ``````
 ::
 
-    beet remove [-ad] QUERY
+    beet remove [-adf] QUERY
 
 Remove music from your library.
 
@@ -214,6 +219,7 @@ This command uses the same :doc:`query <query>` syntax as the ``list`` command.
 You'll be shown a list of the files that will be removed and asked to confirm.
 By default, this just removes entries from the library database; it doesn't
 touch the files on disk. To actually delete the files, use ``beet remove -d``.
+If you do not want to be prompted to remove the files, use ``beet remove -f``.
 
 .. _modify-cmd:
 
@@ -221,7 +227,7 @@ modify
 ``````
 ::
 
-    beet modify [-MWay] QUERY [FIELD=VALUE...] [FIELD!...]
+    beet modify [-MWay] [-f FORMAT] QUERY [FIELD=VALUE...] [FIELD!...]
 
 Change the metadata for items or albums in the database.
 
@@ -236,8 +242,16 @@ individual tracks. Items will automatically be moved around when necessary if
 they're in your library directory, but you can disable that with ``-M``. Tags
 will be written to the files according to the settings you have for imports,
 but these can be overridden with ``-w`` (write tags, the default) and ``-W``
-(don't write tags).  Finally, this command politely asks for your permission
-before making any changes, but you can skip that prompt with the ``-y`` switch.
+(don't write tags).
+
+When you run the ``modify`` command, it prints a list of all
+affected items in the library and asks for your permission before making any
+changes. You can then choose to abort the change (type `n`), confirm
+(`y`), or interactively choose some of the items (`s`). In the latter case,
+the command will prompt you for every matching item or album and invite you to
+type `y` or `n`. This option lets you choose precisely which data to change
+without spending too much time to carefully craft a query. To skip the prompts
+entirely, use the ``-y`` option.
 
 .. _move-cmd:
 
@@ -245,7 +259,7 @@ move
 ````
 ::
 
-    beet move [-cap] [-d DIR] QUERY
+    beet move [-capt] [-d DIR] QUERY
 
 Move or copy items in your library.
 
@@ -256,8 +270,9 @@ anywhere in your filesystem. The ``-c`` option copies files instead of moving
 them. As with other commands, the ``-a`` option matches albums instead of items.
 
 To perform a "dry run", just use the ``-p`` (for "pretend") flag. This will
-show you all how the files would be moved but won't actually change anything
-on disk.
+show you a list of files that would be moved but won't actually change anything
+on disk. The ``-t`` option sets the timid mode which will ask again
+before really moving or copying the files.
 
 .. _update-cmd:
 
@@ -265,7 +280,7 @@ update
 ``````
 ::
 
-    beet update [-aM] QUERY
+    beet update [-F] FIELD [-aM] QUERY
 
 Update the library (and, optionally, move files) to reflect out-of-band metadata
 changes and file deletions.
@@ -280,6 +295,11 @@ edited.
 To perform a "dry run" of an update, just use the ``-p`` (for "pretend") flag.
 This will show you all the proposed changes but won't actually change anything
 on disk.
+
+By default, all the changed metadata will be populated back to the database.
+If you only want certain fields to be written, specify them with the ```-F```
+flags (which can be used multiple times). For the list of supported fields,
+please see ```beet fields```.
 
 When an updated track is part of an album, the album-level fields of *all*
 tracks from the album are also updated. (Specifically, the command copies
@@ -311,7 +331,7 @@ You can think of this command as the opposite of :ref:`update-cmd`.
 
 The ``-p`` option previews metadata changes without actually applying them.
 
-The ``-f`` option forces a write to the file, even if the file tags match the database. This is useful for making sure that enabled plugins that run on write (e.g., the Scrub and Zero plugins) are run on the file. 
+The ``-f`` option forces a write to the file, even if the file tags match the database. This is useful for making sure that enabled plugins that run on write (e.g., the Scrub and Zero plugins) are run on the file.
 
 
 
@@ -339,7 +359,9 @@ fields
     beet fields
 
 Show the item and album metadata fields available for use in :doc:`query` and
-:doc:`pathformat`. Includes any template fields provided by plugins.
+:doc:`pathformat`. The listing includes any template fields provided by
+plugins and any flexible attributes you've manually assigned to your items and
+albums.
 
 .. _config-cmd:
 
@@ -427,7 +449,10 @@ later on you will want to re-generate the script.
 zsh
 ```
 
-If you use zsh, take a look at the included `completion script`_.
+If you use zsh, take a look at the included `completion script`_. The script
+should be placed in a directory that is part of your ``fpath``, and `not`
+sourced in your ``.zshrc``. Running ``echo $fpath`` will give you a list of
+valid directories.
 
 Another approach is to use zsh's bash completion compatibility. This snippet
 defines some bash-specific functions to make this work without errors::
@@ -439,7 +464,7 @@ defines some bash-specific functions to make this work without errors::
     _filedir() { :; }
     eval "$(beet completion)"
 
-.. _completion script: https://github.com/sampsyo/beets/blob/master/extra/_beet
+.. _completion script: https://github.com/beetbox/beets/blob/master/extra/_beet
 
 
 .. only:: man

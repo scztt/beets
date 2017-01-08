@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Tom Jaspers.
+# Copyright 2016, Tom Jaspers.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -15,13 +15,16 @@
 
 """Synchronize information from iTunes's library
 """
+
+from __future__ import division, absolute_import, print_function
+
 from contextlib import contextmanager
 import os
 import shutil
 import tempfile
 import plistlib
-import urllib
-from urlparse import urlparse
+
+from six.moves.urllib.parse import urlparse, unquote
 from time import mktime
 
 from beets import util
@@ -54,7 +57,7 @@ def _norm_itunes_path(path):
     # E.g., '\\G:\\Music\\bar' needs to be stripped to 'G:\\Music\\bar'
 
     return util.bytestring_path(os.path.normpath(
-        urllib.unquote(urlparse(path).path)).lstrip('\\')).lower()
+        unquote(urlparse(path).path)).lstrip('\\')).lower()
 
 
 class Itunes(MetaSource):

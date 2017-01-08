@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Peter Schnebel and Johann Klähn.
+# Copyright 2016, Peter Schnebel and Johann Klähn.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -13,8 +13,7 @@
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import mpd
 import socket
@@ -28,6 +27,7 @@ from beets import plugins
 from beets import library
 from beets.util import displayable_path
 from beets.dbcore import types
+import six
 
 # If we lose the connection, how many times do we want to retry and how
 # much time should we wait between retries?
@@ -41,6 +41,8 @@ mpd_config = config['mpd']
 def is_url(path):
     """Try to determine if the path is an URL.
     """
+    if isinstance(path, bytes):  # if it's bytes, then it's a path
+        return False
     return path.split('://', 1)[0] in ['http', 'https']
 
 
@@ -48,7 +50,7 @@ def is_url(path):
 # see http://www.tarmack.eu/code/mpdunicode.py for the general idea
 class MPDClient(mpd.MPDClient):
     def _write_command(self, command, args=[]):
-        args = [unicode(arg).encode('utf-8') for arg in args]
+        args = [six.text_type(arg).encode('utf-8') for arg in args]
         super(MPDClient, self)._write_command(command, args)
 
     def _read_line(self):
@@ -63,14 +65,14 @@ class MPDClientWrapper(object):
         self._log = log
 
         self.music_directory = (
-            mpd_config['music_directory'].get(unicode))
+            mpd_config['music_directory'].as_str())
 
         self.client = MPDClient()
 
     def connect(self):
         """Connect to the MPD.
         """
-        host = mpd_config['host'].get(unicode)
+        host = mpd_config['host'].as_str()
         port = mpd_config['port'].get(int)
 
         if host[0] in ['/', '~']:
@@ -80,15 +82,15 @@ class MPDClientWrapper(object):
         try:
             self.client.connect(host, port)
         except socket.error as e:
-            raise ui.UserError('could not connect to MPD: {0}'.format(e))
+            raise ui.UserError(u'could not connect to MPD: {0}'.format(e))
 
-        password = mpd_config['password'].get(unicode)
+        password = mpd_config['password'].as_str()
         if password:
             try:
                 self.client.password(password)
             except mpd.CommandError as e:
                 raise ui.UserError(
-                    'could not authenticate to MPD: {0}'.format(e)
+                    u'could not authenticate to MPD: {0}'.format(e)
                 )
 
     def disconnect(self):
@@ -329,7 +331,7 @@ class MPDStatsPlugin(plugins.BeetsPlugin):
             'music_directory': config['directory'].as_filename(),
             'rating':          True,
             'rating_mix':      0.75,
-            'host':            u'localhost',
+            'host':            os.environ.get('MPD_HOST', u'localhost'),
             'port':            6600,
             'password':        u'',
         })
@@ -338,27 +340,27 @@ class MPDStatsPlugin(plugins.BeetsPlugin):
     def commands(self):
         cmd = ui.Subcommand(
             'mpdstats',
-            help='run a MPD client to gather play statistics')
+            help=u'run a MPD client to gather play statistics')
         cmd.parser.add_option(
-            '--host', dest='host', type='string',
-            help='set the hostname of the server to connect to')
+            u'--host', dest='host', type='string',
+            help=u'set the hostname of the server to connect to')
         cmd.parser.add_option(
-            '--port', dest='port', type='int',
-            help='set the port of the MPD server to connect to')
+            u'--port', dest='port', type='int',
+            help=u'set the port of the MPD server to connect to')
         cmd.parser.add_option(
-            '--password', dest='password', type='string',
-            help='set the password of the MPD server to connect to')
+            u'--password', dest='password', type='string',
+            help=u'set the password of the MPD server to connect to')
 
         def func(lib, opts, args):
             mpd_config.set_args(opts)
 
             # Overrides for MPD settings.
             if opts.host:
-                mpd_config['host'] = opts.host.decode('utf8')
+                mpd_config['host'] = opts.host.decode('utf-8')
             if opts.port:
                 mpd_config['host'] = int(opts.port)
             if opts.password:
-                mpd_config['password'] = opts.password.decode('utf8')
+                mpd_config['password'] = opts.password.decode('utf-8')
 
             try:
                 MPDStats(lib, self._log).run()

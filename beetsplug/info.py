@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Adrian Sampson.
+# Copyright 2016, Adrian Sampson.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -16,8 +16,7 @@
 """Shows file metadata.
 """
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import os
 import re
@@ -74,7 +73,7 @@ def library_data_emitter(item):
 
 
 def update_summary(summary, tags):
-    for key, value in tags.iteritems():
+    for key, value in tags.items():
         if key not in summary:
             summary[key] = value
         elif summary[key] != value:
@@ -97,7 +96,7 @@ def print_data(data, item=None, fmt=None):
 
     path = displayable_path(item.path) if item else None
     formatted = {}
-    for key, value in data.iteritems():
+    for key, value in data.items():
         if isinstance(value, list):
             formatted[key] = u'; '.join(value)
         if value is not None:
@@ -119,18 +118,47 @@ def print_data(data, item=None, fmt=None):
         ui.print_(lineformat.format(field, value))
 
 
+def print_data_keys(data, item=None):
+    """Print only the keys (field names) for an item.
+    """
+    path = displayable_path(item.path) if item else None
+    formatted = []
+    for key, value in data.items():
+        formatted.append(key)
+
+    if len(formatted) == 0:
+        return
+
+    line_format = u'{0}{{0}}'.format(u' ' * 4)
+    if path:
+        ui.print_(displayable_path(path))
+
+    for field in sorted(formatted):
+        ui.print_(line_format.format(field))
+
+
 class InfoPlugin(BeetsPlugin):
 
     def commands(self):
-        cmd = ui.Subcommand('info', help='show file metadata')
+        cmd = ui.Subcommand('info', help=u'show file metadata')
         cmd.func = self.run
-        cmd.parser.add_option('-l', '--library', action='store_true',
-                              help='show library fields instead of tags')
-        cmd.parser.add_option('-s', '--summarize', action='store_true',
-                              help='summarize the tags of all files')
-        cmd.parser.add_option('-i', '--include-keys', default=[],
-                              action='append', dest='included_keys',
-                              help='comma separated list of keys to show')
+        cmd.parser.add_option(
+            u'-l', u'--library', action='store_true',
+            help=u'show library fields instead of tags',
+        )
+        cmd.parser.add_option(
+            u'-s', u'--summarize', action='store_true',
+            help=u'summarize the tags of all files',
+        )
+        cmd.parser.add_option(
+            u'-i', u'--include-keys', default=[],
+            action='append', dest='included_keys',
+            help=u'comma separated list of keys to show',
+        )
+        cmd.parser.add_option(
+            u'-k', u'--keys-only', action='store_true',
+            help=u'show only the keys',
+        )
         cmd.parser.add_format_option(target='item')
         return [cmd]
 
@@ -173,7 +201,11 @@ class InfoPlugin(BeetsPlugin):
             else:
                 if not first:
                     ui.print_()
-                print_data(data, item, opts.format)
+                if opts.keys_only:
+                    print_data_keys(data, item)
+                else:
+                    fmt = ui.decargs([opts.format])[0] if opts.format else None
+                    print_data(data, item, fmt)
                 first = False
 
         if opts.summarize:
@@ -199,7 +231,7 @@ def make_key_filter(include):
     def filter_(data):
         filtered = dict()
         for key, value in data.items():
-            if any(map(lambda m: m.match(key), matchers)):
+            if any([m.match(key) for m in matchers]):
                 filtered[key] = value
         return filtered
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Bruno Cauet
+# Copyright 2016, Bruno Cauet
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -19,8 +19,7 @@ This plugin is POSIX-only.
 Spec: standards.freedesktop.org/thumbnail-spec/latest/index.html
 """
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 from hashlib import md5
 import os
@@ -35,7 +34,8 @@ from xdg import BaseDirectory
 from beets.plugins import BeetsPlugin
 from beets.ui import Subcommand, decargs
 from beets import util
-from beets.util.artresizer import ArtResizer, has_IM, has_PIL
+from beets.util.artresizer import ArtResizer, get_im_version, get_pil_version
+import six
 
 
 BASE_DIR = os.path.join(BaseDirectory.xdg_cache_home, "thumbnails")
@@ -58,14 +58,15 @@ class ThumbnailsPlugin(BeetsPlugin):
 
     def commands(self):
         thumbnails_command = Subcommand("thumbnails",
-                                        help="Create album thumbnails")
+                                        help=u"Create album thumbnails")
         thumbnails_command.parser.add_option(
-            '-f', '--force', dest='force', action='store_true', default=False,
-            help='force regeneration of thumbnails deemed fine (existing & '
-                 'recent enough)')
+            u'-f', u'--force',
+            dest='force', action='store_true', default=False,
+            help=u'force regeneration of thumbnails deemed fine (existing & '
+                 u'recent enough)')
         thumbnails_command.parser.add_option(
-            '--dolphin', dest='dolphin', action='store_true', default=False,
-            help="create Dolphin-compatible thumbnail information (for KDE)")
+            u'--dolphin', dest='dolphin', action='store_true', default=False,
+            help=u"create Dolphin-compatible thumbnail information (for KDE)")
         thumbnails_command.func = self.process_query
 
         return [thumbnails_command]
@@ -84,27 +85,27 @@ class ThumbnailsPlugin(BeetsPlugin):
             - detect whether we'll use GIO or Python to get URIs
         """
         if not ArtResizer.shared.local:
-            self._log.warning("No local image resizing capabilities, "
-                              "cannot generate thumbnails")
+            self._log.warning(u"No local image resizing capabilities, "
+                              u"cannot generate thumbnails")
             return False
 
         for dir in (NORMAL_DIR, LARGE_DIR):
             if not os.path.exists(dir):
                 os.makedirs(dir)
 
-        if has_IM():
+        if get_im_version():
             self.write_metadata = write_metadata_im
             tool = "IM"
         else:
-            assert has_PIL()  # since we're local
+            assert get_pil_version()  # since we're local
             self.write_metadata = write_metadata_pil
             tool = "PIL"
-        self._log.debug("using {0} to write metadata", tool)
+        self._log.debug(u"using {0} to write metadata", tool)
 
         uri_getter = GioURI()
         if not uri_getter.available:
             uri_getter = PathlibURI()
-        self._log.debug("using {0.name} to compute URIs", uri_getter)
+        self._log.debug(u"using {0.name} to compute URIs", uri_getter)
         self.get_uri = uri_getter.uri
 
         return True
@@ -122,7 +123,7 @@ class ThumbnailsPlugin(BeetsPlugin):
 
         size = ArtResizer.shared.get_size(album.artpath)
         if not size:
-            self._log.warning('problem getting the picture size for {0}',
+            self._log.warning(u'problem getting the picture size for {0}',
                               album.artpath)
             return
 
@@ -132,9 +133,9 @@ class ThumbnailsPlugin(BeetsPlugin):
         wrote &= self.make_cover_thumbnail(album, 128, NORMAL_DIR)
 
         if wrote:
-            self._log.info('wrote thumbnail for {0}', album)
+            self._log.info(u'wrote thumbnail for {0}', album)
         else:
-            self._log.info('nothing to do for {0}', album)
+            self._log.info(u'nothing to do for {0}', album)
 
     def make_cover_thumbnail(self, album, size, target_dir):
         """Make a thumbnail of given size for `album` and put it in
@@ -145,11 +146,11 @@ class ThumbnailsPlugin(BeetsPlugin):
         if os.path.exists(target) and \
            os.stat(target).st_mtime > os.stat(album.artpath).st_mtime:
             if self.config['force']:
-                self._log.debug("found a suitable {1}x{1} thumbnail for {0}, "
-                                "forcing regeneration", album, size)
+                self._log.debug(u"found a suitable {1}x{1} thumbnail for {0}, "
+                                u"forcing regeneration", album, size)
             else:
-                self._log.debug("{1}x{1} thumbnail for {0} exists and is "
-                                "recent enough", album, size)
+                self._log.debug(u"{1}x{1} thumbnail for {0} exists and is "
+                                u"recent enough", album, size)
                 return False
         resized = ArtResizer.shared.resize(size, album.artpath,
                                            util.syspath(target))
@@ -162,19 +163,20 @@ class ThumbnailsPlugin(BeetsPlugin):
         See http://standards.freedesktop.org/thumbnail-spec/latest/x227.html
         """
         uri = self.get_uri(path)
-        hash = md5(uri).hexdigest()
-        return b"{0}.png".format(hash)
+        hash = md5(uri.encode('utf-8')).hexdigest()
+        return util.bytestring_path("{0}.png".format(hash))
 
     def add_tags(self, album, image_path):
         """Write required metadata to the thumbnail
         See http://standards.freedesktop.org/thumbnail-spec/latest/x142.html
         """
+        mtime = os.stat(album.artpath).st_mtime
         metadata = {"Thumb::URI": self.get_uri(album.artpath),
-                    "Thumb::MTime": unicode(os.stat(album.artpath).st_mtime)}
+                    "Thumb::MTime": six.text_type(mtime)}
         try:
             self.write_metadata(image_path, metadata)
         except Exception:
-            self._log.exception("could not write metadata to {0}",
+            self._log.exception(u"could not write metadata to {0}",
                                 util.displayable_path(image_path))
 
     def make_dolphin_cover_thumbnail(self, album):
@@ -183,9 +185,10 @@ class ThumbnailsPlugin(BeetsPlugin):
             return
         artfile = os.path.split(album.artpath)[1]
         with open(outfilename, 'w') as f:
-            f.write(b"[Desktop Entry]\nIcon=./{0}".format(artfile))
+            f.write('[Desktop Entry]\n')
+            f.write('Icon=./{0}'.format(artfile.decode('utf-8')))
             f.close()
-        self._log.debug("Wrote file {0}", util.displayable_path(outfilename))
+        self._log.debug(u"Wrote file {0}", util.displayable_path(outfilename))
 
 
 def write_metadata_im(file, metadata):
@@ -232,7 +235,7 @@ def copy_c_string(c_string):
     # work. A more surefire way would be to allocate a ctypes buffer and copy
     # the data with `memcpy` or somesuch.
     s = ctypes.cast(c_string, ctypes.c_char_p).value
-    return '' + s
+    return b'' + s
 
 
 class GioURI(URIGetter):
@@ -266,7 +269,7 @@ class GioURI(URIGetter):
     def uri(self, path):
         g_file_ptr = self.libgio.g_file_new_for_path(path)
         if not g_file_ptr:
-            raise RuntimeError("No gfile pointer received for {0}".format(
+            raise RuntimeError(u"No gfile pointer received for {0}".format(
                 util.displayable_path(path)))
 
         try:
@@ -277,8 +280,8 @@ class GioURI(URIGetter):
             self.libgio.g_object_unref(g_file_ptr)
         if not uri_ptr:
             self.libgio.g_free(uri_ptr)
-            raise RuntimeError("No URI received from the gfile pointer for "
-                               "{0}".format(util.displayable_path(path)))
+            raise RuntimeError(u"No URI received from the gfile pointer for "
+                               u"{0}".format(util.displayable_path(path)))
 
         try:
             uri = copy_c_string(uri_ptr)

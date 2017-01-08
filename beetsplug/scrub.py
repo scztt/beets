@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Adrian Sampson.
+# Copyright 2016, Adrian Sampson.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -17,8 +17,7 @@
 automatically whenever tags are written.
 """
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 from beets.plugins import BeetsPlugin
 from beets import ui
@@ -27,21 +26,21 @@ from beets import config
 from beets import mediafile
 
 _MUTAGEN_FORMATS = {
-    b'asf': b'ASF',
-    b'apev2': b'APEv2File',
-    b'flac': b'FLAC',
-    b'id3': b'ID3FileType',
-    b'mp3': b'MP3',
-    b'mp4': b'MP4',
-    b'oggflac': b'OggFLAC',
-    b'oggspeex': b'OggSpeex',
-    b'oggtheora': b'OggTheora',
-    b'oggvorbis': b'OggVorbis',
-    b'oggopus': b'OggOpus',
-    b'trueaudio': b'TrueAudio',
-    b'wavpack': b'WavPack',
-    b'monkeysaudio': b'MonkeysAudio',
-    b'optimfrog': b'OptimFROG',
+    'asf': 'ASF',
+    'apev2': 'APEv2File',
+    'flac': 'FLAC',
+    'id3': 'ID3FileType',
+    'mp3': 'MP3',
+    'mp4': 'MP4',
+    'oggflac': 'OggFLAC',
+    'oggspeex': 'OggSpeex',
+    'oggtheora': 'OggTheora',
+    'oggvorbis': 'OggVorbis',
+    'oggopus': 'OggOpus',
+    'trueaudio': 'TrueAudio',
+    'wavpack': 'WavPack',
+    'monkeysaudio': 'MonkeysAudio',
+    'optimfrog': 'OptimFROG',
 }
 
 
@@ -64,10 +63,11 @@ class ScrubPlugin(BeetsPlugin):
                                util.displayable_path(item.path))
                 self._scrub_item(item, opts.write)
 
-        scrub_cmd = ui.Subcommand('scrub', help='clean audio tags')
-        scrub_cmd.parser.add_option('-W', '--nowrite', dest='write',
-                                    action='store_false', default=True,
-                                    help='leave tags empty')
+        scrub_cmd = ui.Subcommand('scrub', help=u'clean audio tags')
+        scrub_cmd.parser.add_option(
+            u'-W', u'--nowrite', dest='write',
+            action='store_false', default=True,
+            help=u'leave tags empty')
         scrub_cmd.func = scrub_func
 
         return [scrub_cmd]
@@ -78,7 +78,7 @@ class ScrubPlugin(BeetsPlugin):
         """
         classes = []
         for modname, clsname in _MUTAGEN_FORMATS.items():
-            mod = __import__(b'mutagen.{0}'.format(modname),
+            mod = __import__('mutagen.{0}'.format(modname),
                              fromlist=[clsname])
             classes.append(getattr(mod, clsname))
         return classes
@@ -119,10 +119,11 @@ class ScrubPlugin(BeetsPlugin):
             try:
                 mf = mediafile.MediaFile(util.syspath(item.path),
                                          config['id3v23'].get(bool))
-            except IOError as exc:
+            except mediafile.UnreadableFileError as exc:
                 self._log.error(u'could not open file to scrub: {0}',
                                 exc)
-            art = mf.art
+                return
+            images = mf.images
 
         # Remove all tags.
         self._scrub(item.path)
@@ -131,11 +132,15 @@ class ScrubPlugin(BeetsPlugin):
         if restore:
             self._log.debug(u'writing new tags after scrub')
             item.try_write()
-            if art:
+            if images:
                 self._log.debug(u'restoring art')
-                mf = mediafile.MediaFile(util.syspath(item.path))
-                mf.art = art
-                mf.save()
+                try:
+                    mf = mediafile.MediaFile(util.syspath(item.path),
+                                             config['id3v23'].get(bool))
+                    mf.images = images
+                    mf.save()
+                except mediafile.UnreadableFileError as exc:
+                    self._log.error(u'could not write tags: {0}', exc)
 
     def import_task_files(self, session, task):
         """Automatically scrub imported files."""

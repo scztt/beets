@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import division, absolute_import, print_function
+
 AUTHOR = u'Adrian Sampson'
 
 # General configuration
@@ -11,16 +13,16 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 project = u'beets'
-copyright = u'2012, Adrian Sampson'
+copyright = u'2016, Adrian Sampson'
 
-version = '1.3'
-release = '1.3.16'
+version = '1.4'
+release = '1.4.3'
 
 pygments_style = 'sphinx'
 
 # External links to the bug tracker.
 extlinks = {
-    'bug': ('https://github.com/sampsyo/beets/issues/%s', '#'),
+    'bug': ('https://github.com/beetbox/beets/issues/%s', '#'),
     'user': ('https://github.com/%s', ''),
 }
 

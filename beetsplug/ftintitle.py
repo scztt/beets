@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of beets.
-# Copyright 2015, Verrus, <github.com/Verrus/beets-plugin-featInTitle>
+# Copyright 2016, Verrus, <github.com/Verrus/beets-plugin-featInTitle>
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -15,8 +15,7 @@
 
 """Moves "featured" artists to the title from the artist field.
 """
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import re
 
@@ -87,12 +86,12 @@ class FtInTitlePlugin(plugins.BeetsPlugin):
 
         self._command = ui.Subcommand(
             'ftintitle',
-            help='move featured artists to the title field')
+            help=u'move featured artists to the title field')
 
         self._command.parser.add_option(
-            '-d', '--drop', dest='drop',
+            u'-d', u'--drop', dest='drop',
             action='store_true', default=False,
-            help='drop featuring from artists and ignore title update')
+            help=u'drop featuring from artists and ignore title update')
 
         if self.config['auto']:
             self.import_stages = [self.imported]
@@ -138,7 +137,7 @@ class FtInTitlePlugin(plugins.BeetsPlugin):
         # Only update the title if it does not already contain a featured
         # artist and if we do not drop featuring information.
         if not drop_feat and not contains_feat(item.title):
-            feat_format = self.config['format'].get(unicode)
+            feat_format = self.config['format'].as_str()
             new_format = feat_format.format(feat_part)
             new_title = u"{0} {1}".format(item.title, new_format)
             self._log.info(u'title: {0} -> {1}', item.title, new_title)

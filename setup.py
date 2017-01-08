@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # This file is part of beets.
-# Copyright 2015, Adrian Sampson.
+# Copyright 2016, Adrian Sampson.
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -56,11 +56,11 @@ if 'sdist' in sys.argv:
 
 setup(
     name='beets',
-    version='1.3.16',
+    version='1.4.3',
     description='music tagger and library organizer',
     author='Adrian Sampson',
     author_email='adrian@radbox.org',
-    url='http://beets.radbox.org/',
+    url='http://beets.io/',
     license='MIT',
     platforms='ALL',
     long_description=_read('README.rst'),
@@ -86,45 +86,48 @@ setup(
     },
 
     install_requires=[
-        'enum34>=1.0.4',
-        'mutagen>=1.27',
+        'six>=1.9',
+        'mutagen>=1.33',
         'munkres',
         'unidecode',
         'musicbrainzngs>=0.4',
         'pyyaml',
         'jellyfish',
     ] + (['colorama'] if (sys.platform == 'win32') else []) +
-        (['ordereddict'] if sys.version_info < (2, 7, 0) else []),
+        (['enum34>=1.0.4'] if sys.version_info < (3, 4, 0) else []),
 
     tests_require=[
         'beautifulsoup4',
         'flask',
         'mock',
-        'pyechonest',
         'pylast',
         'rarfile',
         'responses',
         'pyxdg',
         'pathlib',
         'python-mpd2',
+        'discogs-client'
     ],
 
     # Plugin (optional) dependencies:
     extras_require={
+        'absubmit': ['requests'],
         'fetchart': ['requests'],
         'chroma': ['pyacoustid'],
         'discogs': ['discogs-client>=2.1.0'],
-        'echonest': ['pyechonest'],
+        'beatport': ['requests-oauthlib>=0.6.1'],
         'lastgenre': ['pylast'],
         'mpdstats': ['python-mpd2'],
         'web': ['flask', 'flask-cors'],
         'import': ['rarfile'],
-        'thumbnails': ['pathlib', 'pyxdg'],
+        'thumbnails': ['pyxdg'] +
+        (['pathlib'] if (sys.version_info < (3, 4, 0)) else []),
         'metasync': ['dbus-python'],
     },
     # Non-Python/non-PyPI plugin dependencies:
     # convert: ffmpeg
-    # bpd: pygst
+    # bpd: python-gi and GStreamer
+    # absubmit: extractor binary from http://acousticbrainz.org/download
 
     classifiers=[
         'Topic :: Multimedia :: Sound/Audio',
@@ -134,5 +137,8 @@ setup(
         'Environment :: Web Environment',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
     ],
 )

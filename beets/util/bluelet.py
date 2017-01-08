@@ -7,9 +7,9 @@ asyncore.
 
 Bluelet: easy concurrency without all the messy parallelism.
 """
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
+import six
 import socket
 import select
 import sys
@@ -18,20 +18,6 @@ import errno
 import traceback
 import time
 import collections
-
-
-# A little bit of "six" (Python 2/3 compatibility): cope with PEP 3109 syntax
-# changes.
-
-PY3 = sys.version_info[0] == 3
-if PY3:
-    def _reraise(typ, exc, tb):
-        raise exc.with_traceback(tb)
-else:
-    exec("""
-def _reraise(typ, exc, tb):
-    raise typ, exc, tb
-""")
 
 
 # Basic events used for thread scheduling.
@@ -215,7 +201,7 @@ class ThreadException(Exception):
         self.exc_info = exc_info
 
     def reraise(self):
-        _reraise(self.exc_info[0], self.exc_info[1], self.exc_info[2])
+        six.reraise(self.exc_info[0], self.exc_info[1], self.exc_info[2])
 
 
 SUSPENDED = Event()  # Special sentinel placeholder for suspended threads.
@@ -555,7 +541,7 @@ def spawn(coro):
     and child coroutines run concurrently.
     """
     if not isinstance(coro, types.GeneratorType):
-        raise ValueError('%s is not a coroutine' % coro)
+        raise ValueError(u'%s is not a coroutine' % coro)
     return SpawnEvent(coro)
 
 
@@ -565,7 +551,7 @@ def call(coro):
     returns a value using end(), then this event returns that value.
     """
     if not isinstance(coro, types.GeneratorType):
-        raise ValueError('%s is not a coroutine' % coro)
+        raise ValueError(u'%s is not a coroutine' % coro)
     return DelegationEvent(coro)
 
 
