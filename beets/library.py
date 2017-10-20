@@ -1216,10 +1216,23 @@ def _sqlite_bytelower(bytestring):
         ``-DSQLITE_LIKE_DOESNT_MATCH_BLOBS``. See
         ``https://github.com/beetbox/beets/issues/2172`` for details.
     """
-    if not six.PY2:
-        return bytestring.lower()
+    try:
+        if not six.PY2:
+            result = bytestring.lower()
+        else:
+        #result = buffer(bytearray(bytestring, 'utf-8').lower())  # noqa: F821
+            string = bytestring
+            if type(string) != unicode:
+                string = unicode(bytestring, 'utf-8')
+            string = string.encode('utf-8', 'replace')
+            string = string.lower()
+            result = buffer(string)
 
-    return buffer(bytes(bytestring).lower())  # noqa: F821
+        return result
+    except Exception, e:
+        import traceback
+        traceback.print_exc()
+        raise e
 
 
 # The Library: interface to the database.
