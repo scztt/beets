@@ -109,6 +109,24 @@ def _preferred_alias(aliases):
         return matches[0]
 
 
+def _preferred_release_event(release):
+    """Given a release, select and return the user's preferred release
+    event as a tuple of (country, release_date). Fall back to the
+    default release event if a preferred event is not found.
+    """
+    countries = config['match']['preferred']['countries'].as_str_seq()
+
+    for event in release.get('release-event-list', {}):
+        for country in countries:
+            try:
+                if country in event['area']['iso-3166-1-code-list']:
+                    return country, event['date']
+            except KeyError:
+                pass
+
+    return release.get('country'), release.get('date')
+
+
 def _flatten_artist_credit(credit):
     """Given a list representing an ``artist-credit`` block, flatten the
     data into a triple of joined artist name strings: canonical, sort, and
@@ -189,6 +207,7 @@ def track_info(recording, index=None, medium=None, medium_index=None,
 
     lyricist = []
     composer = []
+    composer_sort = []
     for work_relation in recording.get('work-relation-list', ()):
         if work_relation['type'] != 'performance':
             continue
@@ -200,10 +219,13 @@ def track_info(recording, index=None, medium=None, medium_index=None,
                     lyricist.append(artist_relation['artist']['name'])
                 elif type == 'composer':
                     composer.append(artist_relation['artist']['name'])
+                    composer_sort.append(
+                        artist_relation['artist']['sort-name'])
     if lyricist:
         info.lyricist = u', '.join(lyricist)
     if composer:
         info.composer = u', '.join(composer)
+        info.composer_sort = u', '.join(composer_sort)
 
     arranger = []
     for artist_relation in recording.get('artist-relation-list', ()):
@@ -269,6 +291,7 @@ def album_info(release):
             )
             ti.disctitle = disctitle
             ti.media = format
+            ti.track_alt = track['number']
 
             # Prefer track data, where present, over recording data.
             if track.get('title'):
@@ -300,7 +323,6 @@ def album_info(release):
         info.artist = config['va_name'].as_str()
     info.asin = release.get('asin')
     info.releasegroup_id = release['release-group']['id']
-    info.country = release.get('country')
     info.albumstatus = release.get('status')
 
     # Build up the disambiguation string from the release group and release.
@@ -311,14 +333,28 @@ def album_info(release):
         disambig.append(release.get('disambiguation'))
     info.albumdisambig = u', '.join(disambig)
 
-    # Release type not always populated.
+    # Get the "classic" Release type. This data comes from a legacy API
+    # feature before MusicBrainz supported multiple release types.
     if 'type' in release['release-group']:
         reltype = release['release-group']['type']
         if reltype:
             info.albumtype = reltype.lower()
 
-    # Release dates.
-    release_date = release.get('date')
+    # Log the new-style "primary" and "secondary" release types.
+    # Eventually, we'd like to actually store this data, but we just log
+    # it for now to help understand the differences.
+    if 'primary-type' in release['release-group']:
+        rel_primarytype = release['release-group']['primary-type']
+        if rel_primarytype:
+            log.debug('primary MB release type: ' + rel_primarytype.lower())
+    if 'secondary-type-list' in release['release-group']:
+        if release['release-group']['secondary-type-list']:
+            log.debug('secondary MB release type(s): ' + ', '.join(
+                [secondarytype.lower() for secondarytype in
+                    release['release-group']['secondary-type-list']]))
+
+    # Release events.
+    info.country, release_date = _preferred_release_event(release)
     release_group_date = release['release-group'].get('first-release-date')
     if not release_date:
         # Fall back if release-specific date is not available.
@@ -373,6 +409,7 @@ def match_album(artist, album, tracks=None):
         return
 
     try:
+        log.debug(u'Searching for MusicBrainz releases with: {!r}', criteria)
         res = musicbrainzngs.search_releases(
             limit=config['musicbrainz']['searchlimit'].get(int), **criteria)
     except musicbrainzngs.MusicBrainzError as exc:
@@ -423,6 +460,7 @@ def album_for_id(releaseid):
     object or None if the album is not found. May raise a
     MusicBrainzAPIError.
     """
+    log.debug(u'Requesting MusicBrainz release {}', releaseid)
     albumid = _parse_id(releaseid)
     if not albumid:
         log.debug(u'Invalid MBID ({0}).', releaseid)

@@ -18,6 +18,7 @@
 
 from __future__ import division, absolute_import, print_function
 
+import errno
 import hashlib
 import json
 import os
@@ -90,10 +91,6 @@ class AcousticBrainzSubmitPlugin(plugins.BeetsPlugin):
             self.extractor_sha.update(extractor.read())
         self.extractor_sha = self.extractor_sha.hexdigest()
 
-    supported_formats = {'mp3', 'ogg', 'oga', 'flac', 'mp4', 'm4a', 'm4r',
-                         'm4b', 'm4p', 'aac', 'wma', 'asf', 'mpc', 'wv',
-                         'spx', 'tta', '3g2', 'aif', 'aiff', 'ape'}
-
     base_url = 'https://acousticbrainz.org/api/v1/{mbid}/low-level'
 
     def commands(self):
@@ -119,11 +116,6 @@ class AcousticBrainzSubmitPlugin(plugins.BeetsPlugin):
             self._log.info(u'Not analysing {}, missing '
                            u'musicbrainz track id.', item)
             return None
-        # If file format is not supported skip it.
-        if item['format'].lower() not in self.supported_formats:
-            self._log.info(u'Not analysing {}, file not in '
-                           u'supported format.', item)
-            return None
 
         # Temporary file to save extractor output to, extractor only works
         # if an output file is given. Here we use a temporary file to copy
@@ -132,16 +124,17 @@ class AcousticBrainzSubmitPlugin(plugins.BeetsPlugin):
         tmp_file, filename = tempfile.mkstemp(suffix='.json')
         try:
             # Close the file, so the extractor can overwrite it.
+            os.close(tmp_file)
             try:
                 call([self.extractor, util.syspath(item.path), filename])
             except ABSubmitError as e:
-                self._log.error(
+                self._log.warning(
                     u'Failed to analyse {item} for AcousticBrainz: {error}',
                     item=item, error=e
                 )
                 return None
-            with open(filename) as tmp_file:
-                analysis = json.loads(tmp_file.read())
+            with open(filename, 'rb') as tmp_file:
+                analysis = json.load(tmp_file)
             # Add the hash to the output.
             analysis['metadata']['version']['essentia_build_sha'] = \
                 self.extractor_sha
@@ -150,8 +143,8 @@ class AcousticBrainzSubmitPlugin(plugins.BeetsPlugin):
             try:
                 os.remove(filename)
             except OSError as e:
-                # errno 2 means file does not exist, just ignore this error.
-                if e.errno != 2:
+                # ENOENT means file does not exist, just ignore this error.
+                if e.errno != errno.ENOENT:
                     raise
 
     def _submit_data(self, item, data):

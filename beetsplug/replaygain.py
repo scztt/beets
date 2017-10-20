@@ -23,7 +23,6 @@ import warnings
 import re
 from six.moves import zip
 
-from beets import logging
 from beets import ui
 from beets.plugins import BeetsPlugin
 from beets.util import syspath, command_output, displayable_path, py3_path
@@ -194,8 +193,8 @@ class Bs1770gainBackend(Backend):
         """
         # Construct shell command.
         cmd = [self.command]
-        cmd = cmd + [self.method]
-        cmd = cmd + ['-p']
+        cmd += [self.method]
+        cmd += ['-p']
 
         # Workaround for Windows: the underlying tool fails on paths
         # with the \\?\ prefix, so we don't use it here. This
@@ -227,7 +226,7 @@ class Bs1770gainBackend(Backend):
             ':|done\\.\\s)', re.DOTALL | re.UNICODE)
         results = re.findall(regex, data)
         for parts in results[0:num_lines]:
-            part = parts.split(b'\n')
+            part = parts.split(u'\n')
             if len(part) == 0:
                 self._log.debug(u'bad tool output: {0!r}', text)
                 raise ReplayGainError(u'bs1770gain failed')
@@ -607,6 +606,10 @@ class GStreamerBackend(Backend):
         self._decbin.sync_state_with_parent()
         self._decbin.get_state(self.Gst.CLOCK_TIME_NONE)
 
+        self._decbin.link(self._conv)
+        self._pipe.set_state(self.Gst.State.READY)
+        self._pipe.set_state(self.Gst.State.PLAYING)
+
         return True
 
     def _set_next_file(self):
@@ -794,7 +797,7 @@ class ReplayGainPlugin(BeetsPlugin):
         "command": CommandBackend,
         "gstreamer": GStreamerBackend,
         "audiotools": AudioToolsBackend,
-        "bs1770gain": Bs1770gainBackend
+        "bs1770gain": Bs1770gainBackend,
     }
 
     def __init__(self):
@@ -806,6 +809,7 @@ class ReplayGainPlugin(BeetsPlugin):
             'auto': True,
             'backend': u'command',
             'targetlevel': 89,
+            'r128': ['Opus'],
         })
 
         self.overwrite = self.config['overwrite'].get(bool)
@@ -823,6 +827,9 @@ class ReplayGainPlugin(BeetsPlugin):
         if self.config['auto']:
             self.import_stages = [self.imported]
 
+        # Formats to use R128.
+        self.r128_whitelist = self.config['r128'].as_str_seq()
+
         try:
             self.backend_instance = self.backends[backend_name](
                 self.config, self._log
@@ -831,9 +838,19 @@ class ReplayGainPlugin(BeetsPlugin):
             raise ui.UserError(
                 u'replaygain initialization failed: {0}'.format(e))
 
+        self.r128_backend_instance = ''
+
+    def should_use_r128(self, item):
+        """Checks the plugin setting to decide whether the calculation
+        should be done using the EBU R128 standard and use R128_ tags instead.
+        """
+        return item.format in self.r128_whitelist
+
     def track_requires_gain(self, item):
         return self.overwrite or \
-            (not item.rg_track_gain or not item.rg_track_peak)
+            (self.should_use_r128(item) and not item.r128_track_gain) or \
+            (not self.should_use_r128(item) and
+                (not item.rg_track_gain or not item.rg_track_peak))
 
     def album_requires_gain(self, album):
         # Skip calculating gain only when *all* files don't need
@@ -841,8 +858,12 @@ class ReplayGainPlugin(BeetsPlugin):
         # needs recalculation, we still get an accurate album gain
         # value.
         return self.overwrite or \
-            any([not item.rg_album_gain or not item.rg_album_peak
-                 for item in album.items()])
+            any([self.should_use_r128(item) and
+                (not item.r128_track_gain or not item.r128_album_gain)
+                for item in album.items()]) or \
+            any([not self.should_use_r128(item) and
+                (not item.rg_album_gain or not item.rg_album_peak)
+                for item in album.items()])
 
     def store_track_gain(self, item, track_gain):
         item.rg_track_gain = track_gain.gain
@@ -852,6 +873,12 @@ class ReplayGainPlugin(BeetsPlugin):
         self._log.debug(u'applied track gain {0}, peak {1}',
                         item.rg_track_gain, item.rg_track_peak)
 
+    def store_track_r128_gain(self, item, track_gain):
+        item.r128_track_gain = int(round(track_gain.gain * pow(2, 8)))
+        item.store()
+
+        self._log.debug(u'applied track gain {0}', item.r128_track_gain)
+
     def store_album_gain(self, album, album_gain):
         album.rg_album_gain = album_gain.gain
         album.rg_album_peak = album_gain.peak
@@ -859,6 +886,12 @@ class ReplayGainPlugin(BeetsPlugin):
 
         self._log.debug(u'applied album gain {0}, peak {1}',
                         album.rg_album_gain, album.rg_album_peak)
+
+    def store_album_r128_gain(self, album, album_gain):
+        album.r128_album_gain = int(round(album_gain.gain * pow(2, 8)))
+        album.store()
+
+        self._log.debug(u'applied album gain {0}', album.r128_album_gain)
 
     def handle_album(self, album, write):
         """Compute album and track replay gain store it in all of the
@@ -874,17 +907,35 @@ class ReplayGainPlugin(BeetsPlugin):
 
         self._log.info(u'analyzing {0}', album)
 
+        if (any([self.should_use_r128(item) for item in album.items()]) and not
+                all(([self.should_use_r128(item) for item in album.items()]))):
+                raise ReplayGainError(
+                    u"Mix of ReplayGain and EBU R128 detected"
+                    u" for some tracks in album {0}".format(album)
+                )
+
+        if any([self.should_use_r128(item) for item in album.items()]):
+            if self.r128_backend_instance == '':
+                self.init_r128_backend()
+            backend_instance = self.r128_backend_instance
+            store_track_gain = self.store_track_r128_gain
+            store_album_gain = self.store_album_r128_gain
+        else:
+            backend_instance = self.backend_instance
+            store_track_gain = self.store_track_gain
+            store_album_gain = self.store_album_gain
+
         try:
-            album_gain = self.backend_instance.compute_album_gain(album)
+            album_gain = backend_instance.compute_album_gain(album)
             if len(album_gain.track_gains) != len(album.items()):
                 raise ReplayGainError(
                     u"ReplayGain backend failed "
                     u"for some tracks in album {0}".format(album)
                 )
 
-            self.store_album_gain(album, album_gain.album_gain)
+            store_album_gain(album, album_gain.album_gain)
             for item, track_gain in zip(album.items(), album_gain.track_gains):
-                self.store_track_gain(item, track_gain)
+                store_track_gain(item, track_gain)
                 if write:
                     item.try_write()
         except ReplayGainError as e:
@@ -906,14 +957,23 @@ class ReplayGainPlugin(BeetsPlugin):
 
         self._log.info(u'analyzing {0}', item)
 
+        if self.should_use_r128(item):
+            if self.r128_backend_instance == '':
+                self.init_r128_backend()
+            backend_instance = self.r128_backend_instance
+            store_track_gain = self.store_track_r128_gain
+        else:
+            backend_instance = self.backend_instance
+            store_track_gain = self.store_track_gain
+
         try:
-            track_gains = self.backend_instance.compute_track_gain([item])
+            track_gains = backend_instance.compute_track_gain([item])
             if len(track_gains) != 1:
                 raise ReplayGainError(
                     u"ReplayGain backend failed for track {0}".format(item)
                 )
 
-            self.store_track_gain(item, track_gains[0])
+            store_track_gain(item, track_gains[0])
             if write:
                 item.try_write()
         except ReplayGainError as e:
@@ -921,6 +981,19 @@ class ReplayGainPlugin(BeetsPlugin):
         except FatalReplayGainError as e:
             raise ui.UserError(
                 u"Fatal replay gain error: {0}".format(e))
+
+    def init_r128_backend(self):
+        backend_name = 'bs1770gain'
+
+        try:
+            self.r128_backend_instance = self.backends[backend_name](
+                self.config, self._log
+            )
+        except (ReplayGainError, FatalReplayGainError) as e:
+            raise ui.UserError(
+                u'replaygain initialization failed: {0}'.format(e))
+
+        self.r128_backend_instance.method = '--ebu'
 
     def imported(self, session, task):
         """Add replay gain info to items or albums of ``task``.
@@ -934,8 +1007,6 @@ class ReplayGainPlugin(BeetsPlugin):
         """Return the "replaygain" ui subcommand.
         """
         def func(lib, opts, args):
-            self._log.setLevel(logging.INFO)
-
             write = ui.should_write()
 
             if opts.album:

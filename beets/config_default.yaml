@@ -6,6 +6,7 @@ import:
     copy: yes
     move: no
     link: no
+    hardlink: no
     delete: no
     resume: ask
     incremental: no
@@ -24,6 +25,8 @@ import:
     pretend: false
     search_ids: []
     duplicate_action: ask
+    bell: no
+    set_fields: {}
 
 clutter: ["Thumbs.DB", ".DS_Store"]
 ignore: [".*", "*~", "System Volume Information", "lost+found"]
@@ -37,6 +40,7 @@ replace:
     '\.$': _
     '\s+$': ''
     '^\s+': ''
+    '^-': _
 path_sep_replace: _
 asciify_paths: false
 art_filename: cover

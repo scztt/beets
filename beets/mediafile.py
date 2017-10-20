@@ -36,15 +36,11 @@ data from the tags. In turn ``MediaField`` uses a number of
 from __future__ import division, absolute_import, print_function
 
 import mutagen
-import mutagen.mp3
 import mutagen.id3
-import mutagen.oggopus
-import mutagen.oggvorbis
 import mutagen.mp4
 import mutagen.flac
-import mutagen.monkeysaudio
 import mutagen.asf
-import mutagen.aiff
+
 import codecs
 import datetime
 import re
@@ -77,6 +73,7 @@ TYPES = {
     'mpc':  'Musepack',
     'asf':  'Windows Media',
     'aiff': 'AIFF',
+    'dsf':  'DSD Stream File',
 }
 
 PREFERRED_IMAGE_EXTENSIONS = {'jpeg': 'jpg'}
@@ -99,7 +96,7 @@ class FileTypeError(UnreadableFileError):
     """
     def __init__(self, path, mutagen_type=None):
         if mutagen_type is None:
-            msg = repr(path)
+            msg = u'{0!r}: not in a recognized format'.format(path)
         else:
             msg = u'{0}: of mutagen type {1}'.format(repr(path), mutagen_type)
         Exception.__init__(self, msg)
@@ -157,10 +154,12 @@ def _safe_cast(out_type, val):
             return int(val)
         else:
             # Process any other type as a string.
-            if not isinstance(val, six.string_types):
+            if isinstance(val, bytes):
+                val = val.decode('utf-8', 'ignore')
+            elif not isinstance(val, six.string_types):
                 val = six.text_type(val)
             # Get a number from the front of the string.
-            val = re.match(r'[0-9]*', val.strip()).group(0)
+            val = re.match(r'[\+-]?[0-9]*', val.strip()).group(0)
             if not val:
                 return 0
             else:
@@ -732,7 +731,7 @@ class MP4ImageStorageStyle(MP4ListStorageStyle):
 class MP3StorageStyle(StorageStyle):
     """Store data in ID3 frames.
     """
-    formats = ['MP3', 'AIFF']
+    formats = ['MP3', 'AIFF', 'DSF']
 
     def __init__(self, key, id3_lang=None, **kwargs):
         """Create a new ID3 storage style. `id3_lang` is the value for
@@ -1320,7 +1319,7 @@ class DateField(MediaField):
         for item in items:
             try:
                 items_.append(int(item))
-            except:
+            except (TypeError, ValueError):
                 items_.append(None)
         return items_
 
@@ -1479,6 +1478,8 @@ class MediaFile(object):
             self.type = 'asf'
         elif type(self.mgfile).__name__ == 'AIFF':
             self.type = 'aiff'
+        elif type(self.mgfile).__name__ == 'DSF':
+            self.type = 'dsf'
         else:
             raise FileTypeError(path, type(self.mgfile).__name__)
 
@@ -1638,6 +1639,12 @@ class MediaFile(object):
         MP4StorageStyle('\xa9wrt'),
         StorageStyle('COMPOSER'),
         ASFStorageStyle('WM/Composer'),
+    )
+    composer_sort = MediaField(
+        MP3StorageStyle('TSOC'),
+        MP4StorageStyle('soco'),
+        StorageStyle('COMPOSERSORT'),
+        ASFStorageStyle('WM/Composersortorder'),
     )
     arranger = MediaField(
         MP3PeopleStorageStyle('TIPL', involvement='arranger'),
@@ -1942,9 +1949,9 @@ class MediaFile(object):
             u'replaygain_album_gain',
             float_places=2, suffix=u' dB'
         ),
-        MP4SoundCheckStorageStyle(
-            '----:com.apple.iTunes:iTunNORM',
-            index=1
+        MP4StorageStyle(
+            '----:com.apple.iTunes:replaygain_album_gain',
+            float_places=2, suffix=' dB'
         ),
         StorageStyle(
             u'REPLAYGAIN_ALBUM_GAIN',
@@ -1998,6 +2005,38 @@ class MediaFile(object):
         StorageStyle(u'REPLAYGAIN_ALBUM_PEAK', float_places=6),
         ASFStorageStyle(u'replaygain_album_peak', float_places=6),
         out_type=float,
+    )
+
+    # EBU R128 fields.
+    r128_track_gain = MediaField(
+        MP3DescStorageStyle(
+            u'R128_TRACK_GAIN'
+        ),
+        MP4StorageStyle(
+            '----:com.apple.iTunes:R128_TRACK_GAIN'
+        ),
+        StorageStyle(
+            u'R128_TRACK_GAIN'
+        ),
+        ASFStorageStyle(
+            u'R128_TRACK_GAIN'
+        ),
+        out_type=int,
+    )
+    r128_album_gain = MediaField(
+        MP3DescStorageStyle(
+            u'R128_ALBUM_GAIN'
+        ),
+        MP4StorageStyle(
+            '----:com.apple.iTunes:R128_ALBUM_GAIN'
+        ),
+        StorageStyle(
+            u'R128_ALBUM_GAIN'
+        ),
+        ASFStorageStyle(
+            u'R128_ALBUM_GAIN'
+        ),
+        out_type=int,
     )
 
     initial_key = MediaField(

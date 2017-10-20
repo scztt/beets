@@ -41,6 +41,7 @@ from beets import config
 from beets.util import confit, as_string
 from beets.autotag import mb
 from beets.dbcore import query as db_query
+from beets.dbcore import db
 import six
 
 # On Windows platforms, use colorama to support "ANSI" terminal colors.
@@ -126,8 +127,7 @@ def print_(*strings, **kwargs):
     Python 3.
 
     The `end` keyword argument behaves similarly to the built-in `print`
-    (it defaults to a newline). The value should have the same string
-    type as the arguments.
+    (it defaults to a newline).
     """
     if not strings:
         strings = [u'']
@@ -136,11 +136,24 @@ def print_(*strings, **kwargs):
     txt = u' '.join(strings)
     txt += kwargs.get('end', u'\n')
 
-    # Send bytes to the stdout stream on Python 2.
+    # Encode the string and write it to stdout.
     if six.PY2:
-        txt = txt.encode(_out_encoding(), 'replace')
-
-    sys.stdout.write(txt)
+        # On Python 2, sys.stdout expects bytes.
+        out = txt.encode(_out_encoding(), 'replace')
+        sys.stdout.write(out)
+    else:
+        # On Python 3, sys.stdout expects text strings and uses the
+        # exception-throwing encoding error policy. To avoid throwing
+        # errors and use our configurable encoding override, we use the
+        # underlying bytes buffer instead.
+        if hasattr(sys.stdout, 'buffer'):
+            out = txt.encode(_out_encoding(), 'replace')
+            sys.stdout.buffer.write(out)
+            sys.stdout.buffer.flush()
+        else:
+            # In our test harnesses (e.g., DummyOut), sys.stdout.buffer
+            # does not exist. We instead just record the text string.
+            sys.stdout.write(txt)
 
 
 # Configuration wrappers.
@@ -757,6 +770,34 @@ def show_path_changes(path_changes):
             log.info(u'{0} {1} -> {2}', source, ' ' * pad, dest)
 
 
+# Helper functions for option parsing.
+
+def _store_dict(option, opt_str, value, parser):
+    """Custom action callback to parse options which have ``key=value``
+    pairs as values. All such pairs passed for this option are
+    aggregated into a dictionary.
+    """
+    dest = option.dest
+    option_values = getattr(parser.values, dest, None)
+
+    if option_values is None:
+        # This is the first supplied ``key=value`` pair of option.
+        # Initialize empty dictionary and get a reference to it.
+        setattr(parser.values, dest, dict())
+        option_values = getattr(parser.values, dest)
+
+    try:
+        key, value = map(lambda s: util.text_string(s), value.split('='))
+        if not (key and value):
+            raise ValueError
+    except ValueError:
+        raise UserError(
+            "supplied argument `{0}' is not of the form `key=value'"
+            .format(value))
+
+    option_values[key] = value
+
+
 class CommonOptionsParser(optparse.OptionParser, object):
     """Offers a simple way to add common formatting options.
 
@@ -1110,9 +1151,11 @@ def _configure(options):
     # special handling lets specified plugins get loaded before we
     # finish parsing the command line.
     if getattr(options, 'config', None) is not None:
-        config_path = options.config
+        overlay_path = options.config
         del options.config
-        config.set_file(config_path)
+        config.set_file(overlay_path)
+    else:
+        overlay_path = None
     config.set_args(options)
 
     # Configure the logger.
@@ -1120,6 +1163,10 @@ def _configure(options):
         log.set_global_level(logging.DEBUG)
     else:
         log.set_global_level(logging.INFO)
+
+    if overlay_path:
+        log.debug(u'overlaying configuration: {0}',
+                  util.displayable_path(overlay_path))
 
     config_path = config.user_config_path()
     if os.path.isfile(config_path):
@@ -1229,9 +1276,16 @@ def main(args=None):
     except IOError as exc:
         if exc.errno == errno.EPIPE:
             # "Broken pipe". End silently.
-            pass
+            sys.stderr.close()
         else:
             raise
     except KeyboardInterrupt:
         # Silently ignore ^C except in verbose mode.
         log.debug(u'{}', traceback.format_exc())
+    except db.DBAccessError as exc:
+        log.error(
+            u'database access error: {0}\n'
+            u'the library file might have a permissions problem',
+            exc
+        )
+        sys.exit(1)

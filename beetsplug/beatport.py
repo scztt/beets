@@ -161,7 +161,8 @@ class BeatportClient(object):
         :returns:               Tracks in the matching release
         :rtype:                 list of :py:class:`BeatportTrack`
         """
-        response = self._get('/catalog/3/tracks', releaseId=beatport_id)
+        response = self._get('/catalog/3/tracks', releaseId=beatport_id,
+                             perPage=100)
         return [BeatportTrack(t) for t in response]
 
     def get_track(self, beatport_id):
@@ -393,10 +394,10 @@ class BeatportPlugin(BeetsPlugin):
         # cause a query to return no results, even if they match the artist or
         # album title. Use `re.UNICODE` flag to avoid stripping non-english
         # word characters.
-        query = re.sub(r'\W+', ' ', query, re.UNICODE)
+        query = re.sub(r'\W+', ' ', query, flags=re.UNICODE)
         # Strip medium information from query, Things like "CD1" and "disk 1"
         # can also negate an otherwise positive result.
-        query = re.sub(r'\b(CD|disc)\s*\d+', '', query, re.I)
+        query = re.sub(r'\b(CD|disc)\s*\d+', '', query, flags=re.I)
         albums = [self._get_album_info(x)
                   for x in self.client.search(query)]
         return albums

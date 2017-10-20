@@ -131,6 +131,7 @@ unexpected behavior on all popular platforms::
         '\.$': _
         '\s+$': ''
         '^\s+': ''
+        '^-': _
 
 These substitutions remove forward and back slashes, leading dots, and
 control characters—all of which is a good idea on any OS. The fourth line
@@ -433,14 +434,27 @@ link
 ~~~~
 
 Either ``yes`` or ``no``, indicating whether to use symbolic links instead of
-moving or copying files. (It conflicts with the ``move`` and ``copy``
-options.) Defaults to ``no``.
+moving or copying files. (It conflicts with the ``move``, ``copy`` and
+``hardlink`` options.) Defaults to ``no``.
 
 This option only works on platforms that support symbolic links: i.e., Unixes.
 It will fail on Windows.
 
 It's likely that you'll also want to set ``write`` to ``no`` if you use this
 option to preserve the metadata on the linked files.
+
+.. _hardlink:
+
+hardlink
+~~~~~~~~
+
+Either ``yes`` or ``no``, indicating whether to use hard links instead of
+moving or copying or symlinking files. (It conflicts with the ``move``,
+``copy``, and ``link`` options.) Defaults to ``no``.
+
+As with symbolic links (see :ref:`link`, above), this will not work on Windows
+and you will want to set ``write`` to ``no``.  Otherwise, metadata on the
+original file will be modified.
 
 resume
 ~~~~~~
@@ -563,6 +577,31 @@ skipped; "keep" means keep both old and new items; "remove" means remove old
 item; "ask" means the user should be prompted for the action each time.
 The default is ``ask``.
 
+.. _bell:
+
+bell
+~~~~
+
+Ring the terminal bell to get your attention when the importer needs your input.
+
+Default: ``no``.
+
+.. _set_fields:
+
+set_fields
+~~~~~~~~~~
+
+A dictionary indicating fields to set to values for newly imported music.
+Here's an example::
+
+    set_fields:
+        genre: 'To Listen'
+        collection: 'Unordered'
+
+Other field/value pairs supplied via the ``--set`` option on the command-line
+override any settings here for fields with the same name.
+
+Default: ``{}`` (empty).
 
 .. _musicbrainz-config:
 
@@ -620,7 +659,7 @@ automatically accept any matches above 90% similarity, use::
 The default strong recommendation threshold is 0.04.
 
 The ``medium_rec_thresh`` and ``rec_gap_thresh`` options work similarly. When a
-match is above the *medium* recommendation threshold or the distance between it
+match is below the *medium* recommendation threshold or the distance between it
 and the next-best match is above the *gap* threshold, the importer will suggest
 that match but not automatically confirm it. Otherwise, you'll see a list of
 options to choose from.

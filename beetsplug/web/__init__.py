@@ -25,6 +25,7 @@ from flask import g
 from werkzeug.routing import BaseConverter, PathConverter
 import os
 import json
+import base64
 
 
 # Utilities.
@@ -37,7 +38,15 @@ def _rep(obj, expand=False):
     out = dict(obj)
 
     if isinstance(obj, beets.library.Item):
-        del out['path']
+        if app.config.get('INCLUDE_PATHS', False):
+            out['path'] = util.displayable_path(out['path'])
+        else:
+            del out['path']
+
+        # Filter all bytes attributes and convert them to strings.
+        for key, value in out.items():
+            if isinstance(out[key], bytes):
+                out[key] = base64.b64encode(value).decode('ascii')
 
         # Get the size (in bytes) of the backing file. This is useful
         # for the Tomahawk resolver API.
@@ -173,11 +182,16 @@ class QueryConverter(PathConverter):
         return ','.join(value)
 
 
+class EverythingConverter(PathConverter):
+    regex = '.*?'
+
+
 # Flask setup.
 
 app = flask.Flask(__name__)
 app.url_map.converters['idlist'] = IdListConverter
 app.url_map.converters['query'] = QueryConverter
+app.url_map.converters['everything'] = EverythingConverter
 
 
 @app.before_request
@@ -203,12 +217,20 @@ def all_items():
 @app.route('/item/<int:item_id>/file')
 def item_file(item_id):
     item = g.lib.get_item(item_id)
+
+    # On Windows under Python 2, Flask wants a Unicode path. On Python 3, it
+    # *always* wants a Unicode path.
+    if os.name == 'nt':
+        item_path = util.syspath(item.path)
+    else:
+        item_path = util.py3_path(item.path)
+
     response = flask.send_file(
-        util.py3_path(item.path),
+        item_path,
         as_attachment=True,
         attachment_filename=os.path.basename(util.py3_path(item.path)),
     )
-    response.headers['Content-Length'] = os.path.getsize(item.path)
+    response.headers['Content-Length'] = os.path.getsize(item_path)
     return response
 
 
@@ -216,6 +238,16 @@ def item_file(item_id):
 @resource_query('items')
 def item_query(queries):
     return g.lib.items(queries)
+
+
+@app.route('/item/path/<everything:path>')
+def item_at_path(path):
+    query = beets.library.PathQuery('path', path.encode('utf-8'))
+    item = g.lib.items(query).get()
+    if item:
+        return flask.jsonify(_rep(item))
+    else:
+        return flask.abort(404)
 
 
 @app.route('/item/values/<string:key>')
@@ -309,6 +341,8 @@ class WebPlugin(BeetsPlugin):
             'host': u'127.0.0.1',
             'port': 8337,
             'cors': '',
+            'reverse_proxy': False,
+            'include_paths': False,
         })
 
     def commands(self):
@@ -327,6 +361,8 @@ class WebPlugin(BeetsPlugin):
             # Normalizes json output
             app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
+            app.config['INCLUDE_PATHS'] = self.config['include_paths']
+
             # Enable CORS if required.
             if self.config['cors']:
                 self._log.info(u'Enabling CORS with origin: {0}',
@@ -337,9 +373,50 @@ class WebPlugin(BeetsPlugin):
                     r"/*": {"origins": self.config['cors'].get(str)}
                 }
                 CORS(app)
+
+            # Allow serving behind a reverse proxy
+            if self.config['reverse_proxy']:
+                app.wsgi_app = ReverseProxied(app.wsgi_app)
+
             # Start the web application.
             app.run(host=self.config['host'].as_str(),
                     port=self.config['port'].get(int),
                     debug=opts.debug, threaded=True)
         cmd.func = func
         return [cmd]
+
+
+class ReverseProxied(object):
+    '''Wrap the application in this middleware and configure the
+    front-end server to add these headers, to let you quietly bind
+    this to a URL other than / and to an HTTP scheme that is
+    different than what is used locally.
+
+    In nginx:
+    location /myprefix {
+        proxy_pass http://192.168.0.1:5001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Scheme $scheme;
+        proxy_set_header X-Script-Name /myprefix;
+        }
+
+    From: http://flask.pocoo.org/snippets/35/
+
+    :param app: the WSGI application
+    '''
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
+        if script_name:
+            environ['SCRIPT_NAME'] = script_name
+            path_info = environ['PATH_INFO']
+            if path_info.startswith(script_name):
+                environ['PATH_INFO'] = path_info[len(script_name):]
+
+        scheme = environ.get('HTTP_X_SCHEME', '')
+        if scheme:
+            environ['wsgi.url_scheme'] = scheme
+        return self.app(environ, start_response)

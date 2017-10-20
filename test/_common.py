@@ -54,6 +54,7 @@ _item_ident = 0
 
 # OS feature test.
 HAVE_SYMLINK = sys.platform != 'win32'
+HAVE_HARDLINK = sys.platform != 'win32'
 
 
 def item(lib=None):
@@ -89,6 +90,7 @@ def item(lib=None):
         mb_artistid='someID-3',
         mb_albumartistid='someID-4',
         album_id=None,
+        mtime=12345,
     )
     if lib:
         lib.add(i)

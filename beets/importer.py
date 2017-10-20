@@ -37,7 +37,7 @@ from beets import dbcore
 from beets import plugins
 from beets import util
 from beets import config
-from beets.util import pipeline, sorted_walk, ancestry
+from beets.util import pipeline, sorted_walk, ancestry, MoveOperation
 from beets.util import syspath, normpath, displayable_path
 from enum import Enum
 from beets import mediafile
@@ -220,13 +220,19 @@ class ImportSession(object):
             iconfig['resume'] = False
             iconfig['incremental'] = False
 
-        # Copy, move, and link are mutually exclusive.
+        # Copy, move, link, and hardlink are mutually exclusive.
         if iconfig['move']:
             iconfig['copy'] = False
             iconfig['link'] = False
+            iconfig['hardlink'] = False
         elif iconfig['link']:
             iconfig['copy'] = False
             iconfig['move'] = False
+            iconfig['hardlink'] = False
+        elif iconfig['hardlink']:
+            iconfig['copy'] = False
+            iconfig['move'] = False
+            iconfig['link'] = False
 
         # Only delete when copying.
         if not iconfig['copy']:
@@ -413,7 +419,7 @@ class ImportTask(BaseImportTask):
       from the `candidates` list.
 
     * `find_duplicates()` Returns a list of albums from `lib` with the
-       same artist and album name as the task.
+      same artist and album name as the task.
 
     * `apply_metadata()` Sets the attributes of the items from the
       task's `match` attribute.
@@ -422,6 +428,9 @@ class ImportTask(BaseImportTask):
 
     * `manipulate_files()` Copy, move, and write files depending on the
       session configuration.
+
+    * `set_fields()` Sets the fields given at CLI or configuration to
+      the specified values.
 
     * `finalize()` Update the import progress and cleanup the file
       system.
@@ -523,6 +532,19 @@ class ImportTask(BaseImportTask):
                 util.remove(item.path)
                 util.prune_dirs(os.path.dirname(item.path),
                                 lib.directory)
+
+    def set_fields(self):
+        """Sets the fields given at CLI or configuration to the specified
+        values.
+        """
+        for field, view in config['import']['set_fields'].items():
+            value = view.get()
+            log.debug(u'Set field {1}={2} for {0}',
+                      displayable_path(self.paths),
+                      field,
+                      value)
+            self.album[field] = value
+        self.album.store()
 
     def finalize(self, session):
         """Save progress, clean up files, and emit plugin event.
@@ -653,20 +675,28 @@ class ImportTask(BaseImportTask):
         for item in self.items:
             item.update(changes)
 
-    def manipulate_files(self, move=False, copy=False, write=False,
-                         link=False, session=None):
+    def manipulate_files(self, operation=None, write=False, session=None):
+        """ Copy, move, link or hardlink (depending on `operation`) the files
+        as well as write metadata.
+
+        `operation` should be an instance of `util.MoveOperation`.
+
+        If `write` is `True` metadata is written to the files.
+        """
+
         items = self.imported_items()
         # Save the original paths of all items for deletion and pruning
         # in the next step (finalization).
         self.old_paths = [item.path for item in items]
         for item in items:
-            if move or copy or link:
+            if operation is not None:
                 # In copy and link modes, treat re-imports specially:
                 # move in-library files. (Out-of-library files are
                 # copied/moved as usual).
                 old_path = item.path
-                if (copy or link) and self.replaced_items[item] and \
-                   session.lib.directory in util.ancestry(old_path):
+                if (operation != MoveOperation.MOVE
+                        and self.replaced_items[item]
+                        and session.lib.directory in util.ancestry(old_path)):
                     item.move()
                     # We moved the item, so remove the
                     # now-nonexistent file from old_paths.
@@ -674,7 +704,7 @@ class ImportTask(BaseImportTask):
                 else:
                     # A normal import. Just copy files and keep track of
                     # old paths.
-                    item.move(copy, link)
+                    item.move(operation)
 
             if write and (self.apply or self.choice_flag == action.RETAG):
                 item.try_write()
@@ -871,6 +901,19 @@ class SingletonImportTask(ImportTask):
     def reload(self):
         self.item.load()
 
+    def set_fields(self):
+        """Sets the fields given at CLI or configuration to the specified
+        values.
+        """
+        for field, view in config['import']['set_fields'].items():
+            value = view.get()
+            log.debug(u'Set field {1}={2} for {0}',
+                      displayable_path(self.paths),
+                      field,
+                      value)
+            self.item[field] = value
+        self.item.store()
+
 
 # FIXME The inheritance relationships are inverted. This is why there
 # are so many methods which pass. More responsibility should be delegated to
@@ -982,7 +1025,7 @@ class ArchiveImportTask(SentinelImportTask):
         `toppath` to that directory.
         """
         for path_test, handler_class in self.handlers():
-            if path_test(self.toppath):
+            if path_test(util.py3_path(self.toppath)):
                 break
 
         try:
@@ -1379,6 +1422,14 @@ def apply_choice(session, task):
 
     task.add(session.lib)
 
+    # If ``set_fields`` is set, set those fields to the
+    # configured values.
+    # NOTE: This cannot be done before the ``task.add()`` call above,
+    # because then the ``ImportTask`` won't have an `album` for which
+    # it can set the fields.
+    if config['import']['set_fields']:
+        task.set_fields()
+
 
 @pipeline.mutator_stage
 def plugin_stage(session, func, task):
@@ -1407,11 +1458,20 @@ def manipulate_files(session, task):
         if task.should_remove_duplicates:
             task.remove_duplicates(session.lib)
 
+        if session.config['move']:
+            operation = MoveOperation.MOVE
+        elif session.config['copy']:
+            operation = MoveOperation.COPY
+        elif session.config['link']:
+            operation = MoveOperation.LINK
+        elif session.config['hardlink']:
+            operation = MoveOperation.HARDLINK
+        else:
+            operation = None
+
         task.manipulate_files(
-            move=session.config['move'],
-            copy=session.config['copy'],
+            operation,
             write=session.config['write'],
-            link=session.config['link'],
             session=session,
         )
 
@@ -1462,6 +1522,14 @@ MULTIDISC_MARKERS = (br'dis[ck]', br'cd')
 MULTIDISC_PAT_FMT = br'^(.*%s[\W_]*)\d'
 
 
+def is_subdir_of_any_in_list(path, dirs):
+    """Returns True if path os a subdirectory of any directory in dirs
+    (a list). In other case, returns False.
+    """
+    ancestors = ancestry(path)
+    return any(d in ancestors for d in dirs)
+
+
 def albums_in_dir(path):
     """Recursively searches the given directory and returns an iterable
     of (paths, items) where paths is a list of directories and items is
@@ -1481,7 +1549,7 @@ def albums_in_dir(path):
         # and add the current directory. If so, just add the directory
         # and move on to the next directory. If not, stop collapsing.
         if collapse_paths:
-            if (not collapse_pat and collapse_paths[0] in ancestry(root)) or \
+            if (is_subdir_of_any_in_list(root, collapse_paths)) or \
                     (collapse_pat and
                      collapse_pat.match(os.path.basename(root))):
                 # Still collapsing.
