@@ -791,7 +791,7 @@ class TerminalImportSession(importer.ImportSession):
             ))
 
             sel = ui.input_options(
-                (u'Skip new', u'Keep both', u'Remove old')
+                (u'Skip new', u'Keep both', u'Remove old', u'Merge all')
             )
 
         if sel == u's':
@@ -803,6 +803,8 @@ class TerminalImportSession(importer.ImportSession):
         elif sel == u'r':
             # Remove old.
             task.should_remove_duplicates = True
+        elif sel == u'm':
+            task.should_merge_duplicates = True
         else:
             assert False
 
@@ -1001,6 +1003,10 @@ import_cmd.parser.add_option(
 import_cmd.parser.add_option(
     u'-I', u'--noincremental', dest='incremental', action='store_false',
     help=u'do not skip already-imported directories'
+)
+import_cmd.parser.add_option(
+    u'--from-scratch', dest='from_scratch', action='store_true',
+    help=u'erase existing metadata before applying new metadata'
 )
 import_cmd.parser.add_option(
     u'--flat', dest='flat', action='store_true',
