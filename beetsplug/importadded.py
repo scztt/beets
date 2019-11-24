@@ -30,8 +30,8 @@ class ImportAddedPlugin(BeetsPlugin):
         self.item_mtime = dict()
 
         register = self.register_listener
-        register('import_task_start', self.check_config)
-        register('import_task_start', self.record_if_inplace)
+        register('import_task_created', self.check_config)
+        register('import_task_created', self.record_if_inplace)
         register('import_task_files', self.record_reimported)
         register('before_item_moved', self.record_import_mtime)
         register('item_copied', self.record_import_mtime)
@@ -132,7 +132,7 @@ class ImportAddedPlugin(BeetsPlugin):
                             util.displayable_path(item.path), item.added)
             item.store()
 
-    def update_after_write_time(self, item):
+    def update_after_write_time(self, item, path):
         """Update the mtime of the item's file with the item.added value
         after each write of the item if `preserve_write_mtimes` is enabled.
         """

@@ -32,7 +32,7 @@ class DGAlbumInfoTest(_common.TestCase):
         those required for the tests on this class."""
         data = {
             'id': 'ALBUM ID',
-            'uri': 'ALBUM URI',
+            'uri': 'https://www.discogs.com/release/release/13633721',
             'title': 'ALBUM TITLE',
             'year': '3001',
             'artists': [{
@@ -45,6 +45,12 @@ class DGAlbumInfoTest(_common.TestCase):
                 'name': 'FORMAT',
                 'qty': 1
             }],
+            'styles': [
+                'STYLE1', 'STYLE2'
+            ],
+            'genres': [
+                'GENRE1', 'GENRE2'
+            ],
             'labels': [{
                 'name': 'LABEL NAME',
                 'catno': 'CATALOG NUMBER',
@@ -101,9 +107,9 @@ class DGAlbumInfoTest(_common.TestCase):
 
         self.assertEqual(d.mediums, 1)
         self.assertEqual(t[0].medium, 1)
-        self.assertEqual(t[0].medium_total, 1)
+        self.assertEqual(t[0].medium_total, 2)
         self.assertEqual(t[1].medium, 1)
-        self.assertEqual(t[0].medium_total, 1)
+        self.assertEqual(t[0].medium_total, 2)
 
     def test_parse_medium_numbers_two_mediums(self):
         release = self._make_release_from_positions(['1-1', '2-1'])
@@ -112,9 +118,9 @@ class DGAlbumInfoTest(_common.TestCase):
 
         self.assertEqual(d.mediums, 2)
         self.assertEqual(t[0].medium, 1)
-        self.assertEqual(t[0].medium_total, 2)
+        self.assertEqual(t[0].medium_total, 1)
         self.assertEqual(t[1].medium, 2)
-        self.assertEqual(t[1].medium_total, 2)
+        self.assertEqual(t[1].medium_total, 1)
 
     def test_parse_medium_numbers_two_mediums_two_sided(self):
         release = self._make_release_from_positions(['A1', 'B1', 'C1'])
@@ -129,7 +135,7 @@ class DGAlbumInfoTest(_common.TestCase):
         self.assertEqual(t[1].medium_total, 2)
         self.assertEqual(t[1].medium_index, 2)
         self.assertEqual(t[2].medium, 2)
-        self.assertEqual(t[2].medium_total, 2)
+        self.assertEqual(t[2].medium_total, 1)
         self.assertEqual(t[2].medium_index, 1)
 
     def test_parse_track_indices(self):
@@ -139,10 +145,10 @@ class DGAlbumInfoTest(_common.TestCase):
 
         self.assertEqual(t[0].medium_index, 1)
         self.assertEqual(t[0].index, 1)
-        self.assertEqual(t[0].medium_total, 1)
+        self.assertEqual(t[0].medium_total, 2)
         self.assertEqual(t[1].medium_index, 2)
         self.assertEqual(t[1].index, 2)
-        self.assertEqual(t[1].medium_total, 1)
+        self.assertEqual(t[1].medium_total, 2)
 
     def test_parse_track_indices_several_media(self):
         release = self._make_release_from_positions(['1-1', '1-2', '2-1',
@@ -153,16 +159,16 @@ class DGAlbumInfoTest(_common.TestCase):
         self.assertEqual(d.mediums, 3)
         self.assertEqual(t[0].medium_index, 1)
         self.assertEqual(t[0].index, 1)
-        self.assertEqual(t[0].medium_total, 3)
+        self.assertEqual(t[0].medium_total, 2)
         self.assertEqual(t[1].medium_index, 2)
         self.assertEqual(t[1].index, 2)
-        self.assertEqual(t[1].medium_total, 3)
+        self.assertEqual(t[1].medium_total, 2)
         self.assertEqual(t[2].medium_index, 1)
         self.assertEqual(t[2].index, 3)
-        self.assertEqual(t[2].medium_total, 3)
+        self.assertEqual(t[2].medium_total, 1)
         self.assertEqual(t[3].medium_index, 1)
         self.assertEqual(t[3].index, 4)
-        self.assertEqual(t[3].medium_total, 3)
+        self.assertEqual(t[3].medium_total, 1)
 
     def test_parse_position(self):
         """Test the conversion of discogs `position` to medium, medium_index

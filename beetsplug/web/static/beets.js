@@ -4,7 +4,7 @@ var timeFormat = function(secs) {
         return '0:00';
     }
     secs = Math.round(secs);
-    var mins = '' + Math.round(secs / 60);
+    var mins = '' + Math.floor(secs / 60);
     secs = '' + (secs % 60);
     if (secs.length < 2) {
         secs = '0' + secs;
@@ -129,7 +129,7 @@ $.fn.player = function(debug) {
 
 // Simple selection disable for jQuery.
 // Cut-and-paste from:
-// http://stackoverflow.com/questions/2700000
+// https://stackoverflow.com/questions/2700000
 $.fn.disableSelection = function() {
     $(this).attr('unselectable', 'on')
            .css('-moz-user-select', 'none')

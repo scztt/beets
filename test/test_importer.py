@@ -32,10 +32,11 @@ import unittest
 
 from test import _common
 from beets.util import displayable_path, bytestring_path, py3_path
-from test.helper import TestImportSession, TestHelper, has_program, capture_log
+from test.helper import TestHelper, has_program, capture_log
+from test.helper import ImportSessionFixture
 from beets import importer
 from beets.importer import albums_in_dir
-from beets.mediafile import MediaFile
+from mediafile import MediaFile
 from beets import autotag
 from beets.autotag import AlbumInfo, TrackInfo, AlbumMatch
 from beets import config
@@ -223,7 +224,7 @@ class ImportHelper(TestHelper):
         config['import']['link'] = link
         config['import']['hardlink'] = hardlink
 
-        self.importer = TestImportSession(
+        self.importer = ImportSessionFixture(
             self.lib, loghandler=None, query=None,
             paths=[import_dir or self.import_dir]
         )
@@ -643,6 +644,21 @@ class ImportTest(_common.TestCase, ImportHelper):
         self.importer.add_choice(importer.action.APPLY)
         self.importer.run()
         self.assertEqual(self.lib.items().get().genre, u'')
+
+    def test_apply_from_scratch_keeps_format(self):
+        config['import']['from_scratch'] = True
+
+        self.importer.add_choice(importer.action.APPLY)
+        self.importer.run()
+        self.assertEqual(self.lib.items().get().format, u'MP3')
+
+    def test_apply_from_scratch_keeps_bitrate(self):
+        config['import']['from_scratch'] = True
+        bitrate = 80000
+
+        self.importer.add_choice(importer.action.APPLY)
+        self.importer.run()
+        self.assertEqual(self.lib.items().get().bitrate, bitrate)
 
     def test_apply_with_move_deletes_import(self):
         config['import']['move'] = True
@@ -1819,6 +1835,7 @@ def mocked_get_release_by_id(id_, includes=[], release_status=[],
             'id': id_,
             'medium-list': [{
                 'track-list': [{
+                    'id': 'baz',
                     'recording': {
                         'title': 'foo',
                         'id': 'bar',

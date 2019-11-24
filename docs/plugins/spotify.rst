@@ -1,10 +1,16 @@
 Spotify Plugin
 ==============
 
-The ``spotify`` plugin generates `Spotify`_ playlists from tracks in your library. Using the `Spotify Web API`_, any tracks that can be matched with a Spotify ID are returned, and the results can be either pasted in to a playlist or opened directly in the Spotify app.
+The ``spotify`` plugin generates `Spotify`_ playlists from tracks in your
+library with the ``beet spotify`` command using the `Spotify Search API`_.
+
+Also, the plugin can use the Spotify `Album`_ and `Track`_ APIs to provide
+metadata matches for the importer.
 
 .. _Spotify: https://www.spotify.com/
-.. _Spotify Web API: https://developer.spotify.com/web-api/search-item/
+.. _Spotify Search API: https://developer.spotify.com/documentation/web-api/reference/search/search/
+.. _Album: https://developer.spotify.com/documentation/web-api/reference/albums/get-album/
+.. _Track: https://developer.spotify.com/documentation/web-api/reference/tracks/get-track/
 
 Why Use This Plugin?
 --------------------
@@ -12,10 +18,10 @@ Why Use This Plugin?
 * You're a Beets user and Spotify user already.
 * You have playlists or albums you'd like to make available in Spotify from Beets without having to search for each artist/album/track.
 * You want to check which tracks in your library are available on Spotify.
+* You want to autotag music with metadata from the Spotify API.
 
 Basic Usage
 -----------
-
 First, enable the ``spotify`` plugin (see :ref:`using-plugins`).
 Then, use the ``spotify`` command with a beets query::
 
@@ -25,8 +31,8 @@ Here's an example::
 
     $ beet spotify "In The Lonely Hour"
     Processing 14 tracks...
-    http://open.spotify.com/track/19w0OHr8SiZzRhjpnjctJ4
-    http://open.spotify.com/track/3PRLM4FzhplXfySa4B7bxS
+    https://open.spotify.com/track/19w0OHr8SiZzRhjpnjctJ4
+    https://open.spotify.com/track/3PRLM4FzhplXfySa4B7bxS
     [...]
 
 Command-line options include:
@@ -37,8 +43,17 @@ Command-line options include:
 * ``--show-failures`` or ``-f``: List the tracks that did not match a Spotify
   ID.
 
+You can enter the URL for an album or song on Spotify at the ``enter Id``
+prompt during import::
+
+    Enter search, enter Id, aBort, eDit, edit Candidates, plaY? i
+    Enter release ID: https://open.spotify.com/album/2rFYTHFBLQN3AYlrymBPPA
+
 Configuration
 -------------
+
+This plugin can be configured like other metadata source plugins as described in :ref:`metadata-source-plugin-configuration`. In addition, the following
+configuration options are provided.
 
 The default options should work as-is, but there are some options you can put
 in config.yaml under the ``spotify:`` section:
@@ -71,6 +86,7 @@ in config.yaml under the ``spotify:`` section:
 Here's an example::
 
     spotify:
+        source_weight: 0.7
         mode: open
         region_filter: US
         show_failures: on

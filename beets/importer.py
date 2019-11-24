@@ -40,7 +40,7 @@ from beets import config
 from beets.util import pipeline, sorted_walk, ancestry, MoveOperation
 from beets.util import syspath, normpath, displayable_path
 from enum import Enum
-from beets import mediafile
+import mediafile
 
 action = Enum('action',
               ['SKIP', 'ASIS', 'TRACKS', 'APPLY', 'ALBUMS', 'RETAG'])
@@ -313,6 +313,8 @@ class ImportSession(object):
                 stages += [import_asis(self)]
 
             # Plugin stages.
+            for stage_func in plugins.early_import_stages():
+                stages.append(plugin_stage(self, stage_func))
             for stage_func in plugins.import_stages():
                 stages.append(plugin_stage(self, stage_func))
 
@@ -577,8 +579,10 @@ class ImportTask(BaseImportTask):
         # Update progress.
         if session.want_resume:
             self.save_progress()
-        if (session.config['incremental'] and
-                not session.config['incremental_skip_later']):
+        if session.config['incremental'] and not (
+            # Should we skip recording to incremental list?
+            self.skip and session.config['incremental_skip_later']
+        ):
             self.save_history()
 
         self.cleanup(copy=session.config['copy'],
@@ -750,6 +754,8 @@ class ImportTask(BaseImportTask):
             self.record_replaced(lib)
             self.remove_replaced(lib)
             self.album = lib.add_album(self.imported_items())
+            if 'data_source' in self.imported_items()[0]:
+                self.album.data_source = self.imported_items()[0].data_source
             self.reimport_metadata(lib)
 
     def record_replaced(self, lib):
@@ -1055,9 +1061,9 @@ class ArchiveImportTask(SentinelImportTask):
             if path_test(util.py3_path(self.toppath)):
                 break
 
+        extract_to = mkdtemp()
+        archive = handler_class(util.py3_path(self.toppath), mode='r')
         try:
-            extract_to = mkdtemp()
-            archive = handler_class(util.py3_path(self.toppath), mode='r')
             archive.extractall(extract_to)
         finally:
             archive.close()

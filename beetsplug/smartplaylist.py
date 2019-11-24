@@ -21,7 +21,7 @@ from __future__ import division, absolute_import, print_function
 from beets.plugins import BeetsPlugin
 from beets import ui
 from beets.util import (mkdirall, normpath, sanitize_path, syspath,
-                        bytestring_path)
+                        bytestring_path, path_as_posix)
 from beets.library import Item, Album, parse_query_string
 from beets.dbcore import OrQuery
 from beets.dbcore.query import MultipleSort, ParsingError
@@ -37,7 +37,8 @@ class SmartPlaylistPlugin(BeetsPlugin):
             'relative_to': None,
             'playlist_dir': u'.',
             'auto': True,
-            'playlists': []
+            'playlists': [],
+            'forward_slash': False,
         })
 
         self._matched_playlists = None
@@ -81,7 +82,7 @@ class SmartPlaylistPlugin(BeetsPlugin):
 
     def build_queries(self):
         """
-        Instanciate queries for the playlists.
+        Instantiate queries for the playlists.
 
         Each playlist has 2 queries: one or items one for albums, each with a
         sort. We must also remember its name. _unmatched_playlists is a set of
@@ -206,6 +207,8 @@ class SmartPlaylistPlugin(BeetsPlugin):
             mkdirall(m3u_path)
             with open(syspath(m3u_path), 'wb') as f:
                 for path in m3us[m3u]:
+                    if self.config['forward_slash'].get():
+                        path = path_as_posix(path)
                     f.write(path + b'\n')
 
         self._log.info(u"{0} playlists updated", len(self._matched_playlists))

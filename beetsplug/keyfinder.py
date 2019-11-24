@@ -48,7 +48,7 @@ class KeyFinderPlugin(BeetsPlugin):
         self.find_key(lib.items(ui.decargs(args)), write=ui.should_write())
 
     def imported(self, session, task):
-        self.find_key(task.items)
+        self.find_key(task.imported_items())
 
     def find_key(self, items, write=False):
         overwrite = self.config['overwrite'].get(bool)
@@ -60,13 +60,13 @@ class KeyFinderPlugin(BeetsPlugin):
 
             try:
                 output = util.command_output([bin, '-f',
-                                              util.syspath(item.path)])
+                                              util.syspath(item.path)]).stdout
             except (subprocess.CalledProcessError, OSError) as exc:
                 self._log.error(u'execution failed: {0}', exc)
                 continue
             except UnicodeEncodeError:
                 # Workaround for Python 2 Windows bug.
-                # http://bugs.python.org/issue1759845
+                # https://bugs.python.org/issue1759845
                 self._log.error(u'execution failed for Unicode path: {0!r}',
                                 item.path)
                 continue

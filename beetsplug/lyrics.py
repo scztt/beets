@@ -55,6 +55,7 @@ except ImportError:
 
 from beets import plugins
 from beets import ui
+from beets import util
 import beets
 
 DIV_RE = re.compile(r'<(/?)div>?', re.I)
@@ -131,7 +132,7 @@ def unescape(text):
     def replchar(m):
         num = m.group(1)
         return unichar(int(num))
-    out = re.sub(u"&#(\d+);", replchar, out)
+    out = re.sub(u"&#(\\d+);", replchar, out)
     return out
 
 
@@ -359,7 +360,12 @@ class Genius(Backend):
 
         # Gotta go regular html scraping... come on Genius.
         page_url = "https://genius.com" + path
-        page = requests.get(page_url)
+        try:
+            page = requests.get(page_url)
+        except requests.RequestException as exc:
+            self._log.debug(u'Genius page request for {0} failed: {1}',
+                            page_url, exc)
+            return None
         html = BeautifulSoup(page.text, "html.parser")
 
         # Remove script tags that they put in the middle of the lyrics.
@@ -374,8 +380,18 @@ class Genius(Backend):
     def fetch(self, artist, title):
         search_url = self.base_url + "/search"
         data = {'q': title}
-        response = requests.get(search_url, data=data, headers=self.headers)
-        json = response.json()
+        try:
+            response = requests.get(search_url, data=data,
+                                    headers=self.headers)
+        except requests.RequestException as exc:
+            self._log.debug(u'Genius API request failed: {0}', exc)
+            return None
+
+        try:
+            json = response.json()
+        except ValueError:
+            self._log.debug(u'Genius API request returned invalid JSON')
+            return None
 
         song_info = None
         for hit in json["response"]["hits"]:
@@ -391,7 +407,10 @@ class Genius(Backend):
 class LyricsWiki(SymbolsReplaced):
     """Fetch lyrics from LyricsWiki."""
 
-    URL_PATTERN = 'http://lyrics.wikia.com/%s:%s'
+    if util.SNI_SUPPORTED:
+        URL_PATTERN = 'https://lyrics.wikia.com/%s:%s'
+    else:
+        URL_PATTERN = 'http://lyrics.wikia.com/%s:%s'
 
     def fetch(self, artist, title):
         url = self.build_url(artist, title)
@@ -431,7 +450,7 @@ def _scrape_strip_cruft(html, plain_text_out=False):
     html = html.replace('\r', '\n')  # Normalize EOL.
     html = re.sub(r' +', ' ', html)  # Whitespaces collapse.
     html = BREAK_RE.sub('\n', html)  # <br> eats up surrounding '\n'.
-    html = re.sub(r'<(script).*?</\1>(?s)', '', html)  # Strip script tags.
+    html = re.sub(r'(?s)<(script).*?</\1>', '', html)  # Strip script tags.
 
     if plain_text_out:  # Strip remaining HTML tags
         html = COMMENT_RE.sub('', html)
@@ -522,12 +541,12 @@ class Google(Backend):
         """
         text = re.sub(r"[-'_\s]", '_', text)
         text = re.sub(r"_+", '_', text).strip('_')
-        pat = "([^,\(]*)\((.*?)\)"  # Remove content within parentheses
-        text = re.sub(pat, '\g<1>', text).strip()
+        pat = r"([^,\(]*)\((.*?)\)"  # Remove content within parentheses
+        text = re.sub(pat, r'\g<1>', text).strip()
         try:
             text = unicodedata.normalize('NFKD', text).encode('ascii',
                                                               'ignore')
-            text = six.text_type(re.sub('[-\s]+', ' ', text.decode('utf-8')))
+            text = six.text_type(re.sub(r'[-\s]+', ' ', text.decode('utf-8')))
         except UnicodeDecodeError:
             self._log.exception(u"Failing to normalize '{0}'", text)
         return text
@@ -659,6 +678,13 @@ class LyricsPlugin(plugins.BeetsPlugin):
                                   u'the documentation for further details.')
                 sources.remove('google')
 
+        if 'genius' in sources and not HAS_BEAUTIFUL_SOUP:
+            self._log.debug(
+                u'The Genius backend requires BeautifulSoup, which is not '
+                u'installed, so the source is disabled.'
+            )
+            sources.remove('genius')
+
         self.config['bing_lang_from'] = [
             x.lower() for x in self.config['bing_lang_from'].as_str_seq()]
         self.bing_auth_token = None
@@ -698,7 +724,7 @@ class LyricsPlugin(plugins.BeetsPlugin):
         )
         cmd.parser.add_option(
             u'-r', u'--write-rest', dest='writerest',
-            action='store', default='.', metavar='dir',
+            action='store', default=None, metavar='dir',
             help=u'write lyrics to given directory as ReST files',
         )
         cmd.parser.add_option(
@@ -750,7 +776,7 @@ class LyricsPlugin(plugins.BeetsPlugin):
         writing continuously to the same files.
         """
 
-        if item is None or slug(self.artist) != slug(item.artist):
+        if item is None or slug(self.artist) != slug(item.albumartist):
             if self.rest is not None:
                 path = os.path.join(directory, 'artists',
                                     slug(self.artist) + u'.rst')
@@ -759,7 +785,7 @@ class LyricsPlugin(plugins.BeetsPlugin):
                 self.rest = None
                 if item is None:
                     return
-            self.artist = item.artist.strip()
+            self.artist = item.albumartist.strip()
             self.rest = u"%s\n%s\n\n.. contents::\n   :local:\n\n" \
                         % (self.artist,
                            u'=' * len(self.artist))

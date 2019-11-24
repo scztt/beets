@@ -32,8 +32,8 @@ command-line oriented, and you'll get its output in real time.
 Interactive Usage
 -----------------
 
-The `play` plugin can also be invoked during an import. If enabled, the plugin
-adds a `plaY` option to the prompt, so pressing `y` will execute the configured
+The ``play`` plugin can also be invoked during an import. If enabled, the plugin
+adds a ``plaY`` option to the prompt, so pressing ``y`` will execute the configured
 command and play the items currently being imported.
 
 Once the configured command exits, you will be returned to the import
@@ -62,6 +62,9 @@ configuration file. The available options are:
 - **warning_threshold**: Set the minimum number of files to play which will
   trigger a warning to be emitted. If set to ``no``, warning are never issued.
   Default: 100.
+- **bom**: Set whether or not a UTF-8 Byte Order Mark should be emitted into
+  the m3u file. If you're using foobar2000 or Winamp, this is needed.
+  Default: ``no``.
 
 Optional Arguments
 ------------------

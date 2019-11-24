@@ -19,13 +19,13 @@ The Web interface depends on `Flask`_. To get it, just run ``pip install
 flask``. Then enable the ``web`` plugin in your configuration (see
 :ref:`using-plugins`).
 
-.. _Flask: http://flask.pocoo.org/
+.. _Flask: https://flask.pocoo.org/
 
 If you need CORS (it's disabled by default---see :ref:`web-cors`, below), then
 you also need `flask-cors`_. Just type ``pip install flask-cors``.
 
 .. _flask-cors: https://github.com/CoryDolphin/flask-cors
-.. _CORS: http://en.wikipedia.org/wiki/Cross-origin_resource_sharing
+.. _CORS: https://en.wikipedia.org/wiki/Cross-origin_resource_sharing
 
 
 Run the Server
@@ -63,6 +63,8 @@ configuration file. The available options are:
   Default: 8337.
 - **cors**: The CORS allowed origin (see :ref:`web-cors`, below).
   Default: CORS is disabled.
+- **cors_supports_credentials**: Support credentials when using CORS (see :ref:`web-cors`, below).
+  Default: CORS_SUPPORTS_CREDENTIALS is disabled.
 - **reverse_proxy**: If true, enable reverse proxy support (see
   :ref:`reverse-proxy`, below).
   Default: false.
@@ -76,8 +78,8 @@ The Web backend is built using a simple REST+JSON API with the excellent
 `Flask`_ library. The frontend is a single-page application written with
 `Backbone.js`_. This allows future non-Web clients to use the same backend API.
 
-.. _Flask: http://flask.pocoo.org/
-.. _Backbone.js: http://backbonejs.org
+.. _Flask: https://flask.pocoo.org/
+.. _Backbone.js: https://backbonejs.org
 
 Eventually, to make the Web player really viable, we should use a Flash fallback
 for unsupported formats/browsers. There are a number of options for this:
@@ -86,9 +88,9 @@ for unsupported formats/browsers. There are a number of options for this:
 * `html5media`_
 * `MediaElement.js`_
 
-.. _audio.js: http://kolber.github.com/audiojs/
-.. _html5media: http://html5media.info/
-.. _MediaElement.js: http://mediaelementjs.com/
+.. _audio.js: https://kolber.github.io/audiojs/
+.. _html5media: https://html5media.info/
+.. _MediaElement.js: https://mediaelementjs.com/
 
 .. _web-cors:
 
@@ -100,13 +102,17 @@ default, browsers will only allow access from clients running on the same
 server as the API. (You will get an arcane error about ``XMLHttpRequest``
 otherwise.) A technology called `CORS`_ lets you relax this restriction.
 
-If you want to use an in-browser client hosted elsewhere (or running from
-a different server on your machine), first install the `flask-cors`_ plugin by
-typing ``pip install flask-cors``. Then set the ``cors`` configuration option
-to the "origin" (protocol, host, and optional port number) where the client is
-served. Or set it to ``'*'`` to enable access from all origins. Note that
-there are security implications if you set the origin to ``'*'``, so please
-research this before using it.
+If you want to use an in-browser client hosted elsewhere (or running from a
+different server on your machine), first install the `flask-cors`_ plugin by
+typing ``pip install flask-cors``. Then set the ``cors`` configuration option to
+the "origin" (protocol, host, and optional port number) where the client is
+served. Or set it to ``'*'`` to enable access from all origins. Note that there
+are security implications if you set the origin to ``'*'``, so please research
+this before using it.
+
+If the ``web`` server is behind a proxy that uses credentials, you might want
+to set the ``cors_supports_credentials`` configuration option to true to let
+in-browser clients log in.
 
 For example::
 

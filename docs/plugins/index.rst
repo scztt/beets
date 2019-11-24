@@ -13,11 +13,11 @@ Using Plugins
 -------------
 
 To use one of the plugins included with beets (see the rest of this page for a
-list), just use the `plugins` option in your :doc:`config.yaml </reference/config>` file, like so::
+list), just use the ``plugins`` option in your :doc:`config.yaml </reference/config>` file, like so::
 
     plugins: inline convert web
 
-The value for `plugins` can be a space-separated list of plugin names or a
+The value for ``plugins`` can be a space-separated list of plugin names or a
 YAML list like ``[foo, bar]``. You can see which plugins are currently enabled
 by typing ``beet version``.
 
@@ -30,10 +30,31 @@ Each plugin has its own set of options that can be defined in a section bearing 
 
 Some plugins have special dependencies that you'll need to install. The
 documentation page for each plugin will list them in the setup instructions.
-For some, you can use `pip`'s "extras" feature to install the dependencies,
+For some, you can use ``pip``'s "extras" feature to install the dependencies,
 like this::
 
     pip install beets[fetchart,lyrics,lastgenre]
+
+.. _metadata-source-plugin-configuration:
+
+Using Metadata Source Plugins
+-----------------------------
+
+Some plugins provide sources for metadata in addition to MusicBrainz. These
+plugins share the following configuration option:
+
+- **source_weight**: Penalty applied to matches during import. Set to 0.0 to
+  disable.
+  Default: ``0.5``.
+
+For example, to equally consider matches from Discogs and MusicBrainz add the
+following to your configuration::
+
+    plugins: discogs
+
+    discogs:
+       source_weight: 0.0
+
 
 .. toctree::
    :hidden:
@@ -44,9 +65,11 @@ like this::
    beatport
    bpd
    bpm
+   bpsync
    bucket
    chroma
    convert
+   deezer
    discogs
    duplicates
    edit
@@ -54,10 +77,11 @@ like this::
    embyupdate
    export
    fetchart
+   filefilter
+   freedesktop
    fromfilename
    ftintitle
    fuzzy
-   freedesktop
    gmusic
    hook
    ihate
@@ -70,6 +94,7 @@ like this::
    kodiupdate
    lastgenre
    lastimport
+   loadext
    lyrics
    mbcollection
    mbsubmit
@@ -78,19 +103,23 @@ like this::
    missing
    mpdstats
    mpdupdate
+   parentwork
    permissions
    play
+   playlist
    plexupdate
    random
-   filefilter
    replaygain
    rewrite
    scrub
    smartplaylist
+   sonosupdate
    spotify
+   subsonicupdate
    the
    thumbnails
    types
+   unimported
    web
    zero
 
@@ -100,10 +129,14 @@ Autotagger Extensions
 * :doc:`chroma`: Use acoustic fingerprinting to identify audio files with
   missing or incorrect metadata.
 * :doc:`discogs`: Search for releases in the `Discogs`_ database.
+* :doc:`spotify`: Search for releases in the `Spotify`_ database.
+* :doc:`deezer`: Search for releases in the `Deezer`_ database.
 * :doc:`fromfilename`: Guess metadata for untagged tracks from their
   filenames.
 
-.. _Discogs: http://www.discogs.com/
+.. _Discogs: https://www.discogs.com/
+.. _Spotify: https://www.spotify.com
+.. _Deezer: https://www.deezer.com/
 
 Metadata
 --------
@@ -111,6 +144,7 @@ Metadata
 * :doc:`absubmit`: Analyse audio with the `streaming_extractor_music`_ program and submit the metadata to the AcousticBrainz server
 * :doc:`acousticbrainz`: Fetch various AcousticBrainz metadata
 * :doc:`bpm`: Measure tempo using keystrokes.
+* :doc:`bpsync`: Fetch updated metadata from Beatport.
 * :doc:`edit`: Edit metadata from a text editor.
 * :doc:`embedart`: Embed album art images into files' metadata.
 * :doc:`fetchart`: Fetch album cover art from various sources.
@@ -123,16 +157,17 @@ Metadata
 * :doc:`lastgenre`: Fetch genres based on Last.fm tags.
 * :doc:`lastimport`: Collect play counts from Last.fm.
 * :doc:`lyrics`: Automatically fetch song lyrics.
-* :doc:`mbsync`: Fetch updated metadata from MusicBrainz
+* :doc:`mbsync`: Fetch updated metadata from MusicBrainz.
 * :doc:`metasync`: Fetch metadata from local or remote sources
 * :doc:`mpdstats`: Connect to `MPD`_ and update the beets library with play
   statistics (last_played, play_count, skip_count, rating).
+* :doc:`parentwork`: Fetch work titles and works they are part of. 
 * :doc:`replaygain`: Calculate volume normalization for players that support it.
 * :doc:`scrub`: Clean extraneous metadata from music files.
 * :doc:`zero`: Nullify fields by pattern or unconditionally.
 
 .. _KeyFinder: http://www.ibrahimshaath.co.uk/keyfinder/
-.. _streaming_extractor_music: http://acousticbrainz.org/download
+.. _streaming_extractor_music: https://acousticbrainz.org/download
 
 Path Formats
 ------------
@@ -147,6 +182,7 @@ Path Formats
 Interoperability
 ----------------
 
+* :doc:`badfiles`: Check audio file integrity.
 * :doc:`embyupdate`: Automatically notifies `Emby`_ whenever the beets library changes.
 * :doc:`importfeeds`: Keep track of imported files via ``.m3u`` playlist file(s) or symlinks.
 * :doc:`ipfs`: Import libraries from friends and get albums from them via ipfs.
@@ -155,16 +191,19 @@ Interoperability
 * :doc:`mpdupdate`: Automatically notifies `MPD`_ whenever the beets library
   changes.
 * :doc:`play`: Play beets queries in your music player.
+* :doc:`playlist`: Use M3U playlists to query the beets library.
 * :doc:`plexupdate`: Automatically notifies `Plex`_ whenever the beets library
   changes.
 * :doc:`smartplaylist`: Generate smart playlists based on beets queries.
+* :doc:`sonosupdate`: Automatically notifies `Sonos`_ whenever the beets library
+  changes.
 * :doc:`thumbnails`: Get thumbnails with the cover art on your album folders.
-* :doc:`badfiles`: Check audio file integrity.
 
 
-.. _Emby: http://emby.media
-.. _Plex: http://plex.tv
-.. _Kodi: http://kodi.tv
+.. _Emby: https://emby.media
+.. _Plex: https://plex.tv
+.. _Kodi: https://kodi.tv
+.. _Sonos: https://sonos.com
 
 Miscellaneous
 -------------
@@ -175,23 +214,26 @@ Miscellaneous
   a different directory.
 * :doc:`duplicates`: List duplicate tracks or albums.
 * :doc:`export`: Export data from queries to a format.
+* :doc:`filefilter`: Automatically skip files during the import process based
+  on regular expressions.
 * :doc:`fuzzy`: Search albums and tracks with fuzzy string matching.
 * :doc:`gmusic`: Search and upload files to Google Play Music.
 * :doc:`hook`: Run a command when an event is emitted by beets.
 * :doc:`ihate`: Automatically skip albums and tracks during the import process.
 * :doc:`info`: Print music files' tags to the console.
+* :doc:`loadext`: Load SQLite extensions.
 * :doc:`mbcollection`: Maintain your MusicBrainz collection list.
 * :doc:`mbsubmit`: Print an album's tracks in a MusicBrainz-friendly format.
 * :doc:`missing`: List missing tracks.
+* `mstream`_: A music streaming server + webapp that can be used alongside beets.
 * :doc:`random`: Randomly choose albums and tracks from your library.
-* :doc:`filefilter`: Automatically skip files during the import process based
-  on regular expressions.
 * :doc:`spotify`: Create Spotify playlists from the Beets library.
 * :doc:`types`: Declare types for flexible attributes.
 * :doc:`web`: An experimental Web-based GUI for beets.
 
-.. _MPD: http://www.musicpd.org/
-.. _MPD clients: http://mpd.wikia.com/wiki/Clients
+.. _MPD: https://www.musicpd.org/
+.. _MPD clients: https://mpd.wikia.com/wiki/Clients
+.. _mstream: https://github.com/IrosTheBeggar/mStream
 
 .. _other-plugins:
 
@@ -202,14 +244,14 @@ In addition to the plugins that come with beets, there are several plugins
 that are maintained by the beets community. To use an external plugin, there
 are two options for installation:
 
-* Make sure it's in the Python path (known as `sys.path` to developers). This
+* Make sure it's in the Python path (known as ``sys.path`` to developers). This
   just means the plugin has to be installed on your system (e.g., with a
-  `setup.py` script or a command like `pip` or `easy_install`).
+  ``setup.py`` script or a command like ``pip`` or ``easy_install``).
 
-* Set the `pluginpath` config variable to point to the directory containing the
+* Set the ``pluginpath`` config variable to point to the directory containing the
   plugin. (See :doc:`/reference/config`.)
 
-Once the plugin is installed, enable it by placing its name on the `plugins`
+Once the plugin is installed, enable it by placing its name on the ``plugins``
 line in your config file.
 
 Here are a few of the plugins written by the beets community:
@@ -244,6 +286,17 @@ Here are a few of the plugins written by the beets community:
 
 * `beets-popularity`_ fetches popularity values from Spotify.
 
+* `beets-barcode`_ lets you scan or enter barcodes for physical media to
+  search for their metadata.
+
+* `beets-ydl`_ downloads audio from youtube-dl sources and import into beets.
+
+* `beet-summarize`_ can compute lots of counts and statistics about your music
+  library.
+
+* `beets-mosaic`_ generates a montage of a mosiac from cover art.
+
+.. _beets-barcode: https://github.com/8h2a/beets-barcode
 .. _beets-check: https://github.com/geigerzaehler/beets-check
 .. _copyartifacts: https://github.com/sbarakat/beets-copyartifacts
 .. _dsedivec: https://github.com/dsedivec/beets-plugins
@@ -262,4 +315,6 @@ Here are a few of the plugins written by the beets community:
 .. _whatlastgenre: https://github.com/YetAnotherNerd/whatlastgenre/tree/master/plugin/beets
 .. _beets-usertag: https://github.com/igordertigor/beets-usertag
 .. _beets-popularity: https://github.com/abba23/beets-popularity
-
+.. _beets-ydl: https://github.com/vmassuchetto/beets-ydl
+.. _beet-summarize: https://github.com/steven-murray/beet-summarize
+.. _beets-mosaic: https://github.com/SusannaMaria/beets-mosaic

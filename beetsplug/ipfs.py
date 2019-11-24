@@ -32,6 +32,7 @@ class IPFSPlugin(BeetsPlugin):
         super(IPFSPlugin, self).__init__()
         self.config.add({
             'auto': True,
+            'nocopy': False,
         })
 
         if self.config['auto']:
@@ -116,10 +117,13 @@ class IPFSPlugin(BeetsPlugin):
 
         self._log.info('Adding {0} to ipfs', album_dir)
 
-        cmd = "ipfs add -q -r".split()
+        if self.config['nocopy']:
+            cmd = "ipfs add --nocopy -q -r".split()
+        else:
+            cmd = "ipfs add -q -r".split()
         cmd.append(album_dir)
         try:
-            output = util.command_output(cmd).split()
+            output = util.command_output(cmd).stdout.split()
         except (OSError, subprocess.CalledProcessError) as exc:
             self._log.error(u'Failed to add {0}, error: {1}', album_dir, exc)
             return False
@@ -174,9 +178,12 @@ class IPFSPlugin(BeetsPlugin):
         with tempfile.NamedTemporaryFile() as tmp:
             self.ipfs_added_albums(lib, tmp.name)
             try:
-                cmd = "ipfs add -q ".split()
+                if self.config['nocopy']:
+                    cmd = "ipfs add --nocopy -q ".split()
+                else:
+                    cmd = "ipfs add -q ".split()
                 cmd.append(tmp.name)
-                output = util.command_output(cmd)
+                output = util.command_output(cmd).stdout
             except (OSError, subprocess.CalledProcessError) as err:
                 msg = "Failed to publish library. Error: {0}".format(err)
                 self._log.error(msg)

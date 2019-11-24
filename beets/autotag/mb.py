@@ -39,7 +39,7 @@ else:
 SKIPPED_TRACKS = ['[data track]']
 
 musicbrainzngs.set_useragent('beets', beets.__version__,
-                             'http://beets.io/')
+                             'https://beets.io/')
 
 
 class MusicBrainzAPIError(util.HumanReadableException):
@@ -118,8 +118,8 @@ def _preferred_release_event(release):
     """
     countries = config['match']['preferred']['countries'].as_str_seq()
 
-    for event in release.get('release-event-list', {}):
-        for country in countries:
+    for country in countries:
+        for event in release.get('release-event-list', {}):
             try:
                 if country in event['area']['iso-3166-1-code-list']:
                     return country, event['date']
@@ -213,6 +213,11 @@ def track_info(recording, index=None, medium=None, medium_index=None,
     for work_relation in recording.get('work-relation-list', ()):
         if work_relation['type'] != 'performance':
             continue
+        info.work = work_relation['work']['title']
+        info.mb_workid = work_relation['work']['id']
+        if 'disambiguation' in work_relation['work']:
+            info.work_disambig = work_relation['work']['disambiguation']
+
         for artist_relation in work_relation['work'].get(
                 'artist-relation-list', ()):
             if 'type' in artist_relation:
@@ -281,6 +286,11 @@ def album_info(release):
             continue
 
         all_tracks = medium['track-list']
+        if ('data-track-list' in medium
+                and not config['match']['ignore_data_tracks']):
+            all_tracks += medium['data-track-list']
+        track_count = len(all_tracks)
+
         if 'pregap' in medium:
             all_tracks.insert(0, medium['pregap'])
 
@@ -302,8 +312,9 @@ def album_info(release):
                 index,
                 int(medium['position']),
                 int(track['position']),
-                len(medium['track-list']),
+                track_count,
             )
+            ti.release_track_id = track['id']
             ti.disctitle = disctitle
             ti.media = format
             ti.track_alt = track['number']
@@ -340,13 +351,12 @@ def album_info(release):
     info.releasegroup_id = release['release-group']['id']
     info.albumstatus = release.get('status')
 
-    # Build up the disambiguation string from the release group and release.
-    disambig = []
+    # Get the disambiguation strings at the release and release group level.
     if release['release-group'].get('disambiguation'):
-        disambig.append(release['release-group'].get('disambiguation'))
+        info.releasegroupdisambig = \
+            release['release-group'].get('disambiguation')
     if release.get('disambiguation'):
-        disambig.append(release.get('disambiguation'))
-    info.albumdisambig = u', '.join(disambig)
+        info.albumdisambig = release.get('disambiguation')
 
     # Get the "classic" Release type. This data comes from a legacy API
     # feature before MusicBrainz supported multiple release types.

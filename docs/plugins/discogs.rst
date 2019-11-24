@@ -4,7 +4,7 @@ Discogs Plugin
 The ``discogs`` plugin extends the autotagger's search capabilities to
 include matches from the `Discogs`_ database.
 
-.. _Discogs: http://discogs.com
+.. _Discogs: https://discogs.com
 
 Installation
 ------------
@@ -42,6 +42,11 @@ documentation), login to `Discogs`_, and visit the
 <https://www.discogs.com/settings/developers>`_. Press the ``Generate new
 token`` button, and place the generated token in your configuration, as the
 ``user_token`` config option in the ``discogs`` section.
+
+Configuration
+-------------
+
+This plugin can be configured like other metadata source plugins as described in :ref:`metadata-source-plugin-configuration`.
 
 Troubleshooting
 ---------------
