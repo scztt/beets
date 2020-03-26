@@ -135,7 +135,8 @@ class Candidate(object):
 
     def resize(self, plugin):
         if plugin.maxwidth and self.check == self.CANDIDATE_DOWNSCALE:
-            self.path = ArtResizer.shared.resize(plugin.maxwidth, self.path)
+            self.path = ArtResizer.shared.resize(plugin.maxwidth, self.path,
+                                                 quality=plugin.quality)
 
 
 def _logged_get(log, *args, **kwargs):
@@ -164,9 +165,14 @@ def _logged_get(log, *args, **kwargs):
         message = 'getting URL'
 
     req = requests.Request('GET', *args, **req_kwargs)
+
     with requests.Session() as s:
         s.headers = {'User-Agent': 'beets'}
         prepped = s.prepare_request(req)
+        settings = s.merge_environment_settings(
+            prepped.url, {}, None, None, None
+        )
+        send_kwargs.update(settings)
         log.debug('{}: {}', message, prepped.url)
         return s.send(prepped, **send_kwargs)
 
@@ -505,12 +511,18 @@ class ITunesStore(RemoteArtSource):
                             payload['term'])
             return
 
+        if self._config['high_resolution']:
+            image_suffix = '100000x100000-999'
+        else:
+            image_suffix = '1200x1200bb'
+
         for c in candidates:
             try:
                 if (c['artistName'] == album.albumartist
                         and c['collectionName'] == album.album):
                     art_url = c['artworkUrl100']
-                    art_url = art_url.replace('100x100', '1200x1200')
+                    art_url = art_url.replace('100x100bb',
+                                              image_suffix)
                     yield self._candidate(url=art_url,
                                           match=Candidate.MATCH_EXACT)
             except KeyError as e:
@@ -520,7 +532,8 @@ class ITunesStore(RemoteArtSource):
 
         try:
             fallback_art_url = candidates[0]['artworkUrl100']
-            fallback_art_url = fallback_art_url.replace('100x100', '1200x1200')
+            fallback_art_url = fallback_art_url.replace('100x100bb',
+                                                        image_suffix)
             yield self._candidate(url=fallback_art_url,
                                   match=Candidate.MATCH_FALLBACK)
         except KeyError as e:
@@ -765,6 +778,7 @@ class FetchArtPlugin(plugins.BeetsPlugin, RequestMixin):
             'auto': True,
             'minwidth': 0,
             'maxwidth': 0,
+            'quality': 0,
             'enforce_ratio': False,
             'cautious': False,
             'cover_names': ['cover', 'front', 'art', 'album', 'folder'],
@@ -774,12 +788,14 @@ class FetchArtPlugin(plugins.BeetsPlugin, RequestMixin):
             'google_engine': u'001442825323518660753:hrh5ch1gjzm',
             'fanarttv_key': None,
             'store_source': False,
+            'high_resolution': False,
         })
         self.config['google_key'].redact = True
         self.config['fanarttv_key'].redact = True
 
         self.minwidth = self.config['minwidth'].get(int)
         self.maxwidth = self.config['maxwidth'].get(int)
+        self.quality = self.config['quality'].get(int)
 
         # allow both pixel and percentage-based margin specifications
         self.enforce_ratio = self.config['enforce_ratio'].get(
@@ -909,9 +925,10 @@ class FetchArtPlugin(plugins.BeetsPlugin, RequestMixin):
     def art_for_album(self, album, paths, local_only=False):
         """Given an Album object, returns a path to downloaded art for the
         album (or None if no art is found). If `maxwidth`, then images are
-        resized to this maximum pixel size. If `local_only`, then only local
-        image files from the filesystem are returned; no network requests
-        are made.
+        resized to this maximum pixel size. If `quality` then resized images
+        are saved at the specified quality level. If `local_only`, then only
+        local image files from the filesystem are returned; no network
+        requests are made.
         """
         out = None
 

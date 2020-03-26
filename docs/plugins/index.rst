@@ -78,6 +78,7 @@ following to your configuration::
    export
    fetchart
    filefilter
+   fish
    freedesktop
    fromfilename
    ftintitle
@@ -184,6 +185,7 @@ Interoperability
 
 * :doc:`badfiles`: Check audio file integrity.
 * :doc:`embyupdate`: Automatically notifies `Emby`_ whenever the beets library changes.
+* :doc:`fish`: Adds `Fish shell`_ tab autocompletion to ``beet`` commands.
 * :doc:`importfeeds`: Keep track of imported files via ``.m3u`` playlist file(s) or symlinks.
 * :doc:`ipfs`: Import libraries from friends and get albums from them via ipfs.
 * :doc:`kodiupdate`: Automatically notifies `Kodi`_ whenever the beets library
@@ -198,12 +200,16 @@ Interoperability
 * :doc:`sonosupdate`: Automatically notifies `Sonos`_ whenever the beets library
   changes.
 * :doc:`thumbnails`: Get thumbnails with the cover art on your album folders.
+* :doc:`subsonicupdate`: Automatically notifies `Subsonic`_ whenever the beets
+  library changes.
 
 
 .. _Emby: https://emby.media
+.. _Fish shell: https://fishshell.com/
 .. _Plex: https://plex.tv
 .. _Kodi: https://kodi.tv
 .. _Sonos: https://sonos.com
+.. _Subsonic: http://www.subsonic.org/
 
 Miscellaneous
 -------------
@@ -296,6 +302,10 @@ Here are a few of the plugins written by the beets community:
 
 * `beets-mosaic`_ generates a montage of a mosiac from cover art.
 
+* `beets-bpmanalyser`_ analyses songs and calculates their tempo (BPM).
+
+* `beets-goingrunning`_ copies songs to external device to go with your running session.
+
 .. _beets-barcode: https://github.com/8h2a/beets-barcode
 .. _beets-check: https://github.com/geigerzaehler/beets-check
 .. _copyartifacts: https://github.com/sbarakat/beets-copyartifacts
@@ -318,3 +328,5 @@ Here are a few of the plugins written by the beets community:
 .. _beets-ydl: https://github.com/vmassuchetto/beets-ydl
 .. _beet-summarize: https://github.com/steven-murray/beet-summarize
 .. _beets-mosaic: https://github.com/SusannaMaria/beets-mosaic
+.. _beets-bpmanalyser: https://github.com/adamjakab/BeetsPluginBpmAnalyser
+.. _beets-goingrunning: https://pypi.org/project/beets-goingrunning/
