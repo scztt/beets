@@ -113,10 +113,10 @@ class ImportAddedPlugin(BeetsPlugin):
                     self.write_item_mtime(item, mtime)
                     item.store()
         if album_mtimes:
-        album.added = min(album_mtimes)
-        self._log.debug(u"Import of album '{0}', selected album.added={1} "
+            album.added = min(album_mtimes)
+            self._log.debug(u"Import of album '{0}', selected album.added={1} "
                         u"from item file mtimes.", album.album, album.added)
-        album.store()
+            album.store()
 
     def update_item_times(self, lib, item):
         if self.reimported_item(item):
